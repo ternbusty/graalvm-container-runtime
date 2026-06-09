@@ -106,6 +106,12 @@ public final class ForeignFeature implements Feature {
         // (int,ptr,int)->int  (waitpid)
         reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
                 ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+        // (int,ptr,long)->int  (ptsname_r)
+        reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG));
+        // (int,ptr,int)->long  (sendmsg / recvmsg)
+        reg(FunctionDescriptor.of(ValueLayout.JAVA_LONG,
+                ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
         // (ptr,int,long)->int  (seccomp_attr_set)
         reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
