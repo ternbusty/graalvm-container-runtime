@@ -32,10 +32,10 @@
 #define CLONE_PARENT 0x00008000
 #endif
 
-#define ENV_IS_BOOTSTRAP "_GCR_IS_BOOTSTRAP"
-#define ENV_SYNCPIPE "_GCR_SYNCPIPE"
-#define ENV_CLONE_FLAGS "_GCR_CLONE_FLAGS"
-#define ENV_DEBUG "_GCR_BOOTSTRAP_DEBUG"
+#define ENV_IS_BOOTSTRAP "_TAKOYAKI_IS_BOOTSTRAP"
+#define ENV_SYNCPIPE "_TAKOYAKI_SYNCPIPE"
+#define ENV_CLONE_FLAGS "_TAKOYAKI_CLONE_FLAGS"
+#define ENV_DEBUG "_TAKOYAKI_BOOTSTRAP_DEBUG"
 
 static int is_init_process = 0;
 
@@ -88,7 +88,7 @@ static pid_t clone_parent(void) {
 }
 
 __attribute__((constructor))
-void gcr_bootstrap(void) {
+void takoyaki_bootstrap(void) {
     int sync_fd;
     int sync_pipe[2];
     pid_t stage2_pid = -1;
@@ -235,7 +235,7 @@ void gcr_bootstrap(void) {
         unsetenv(ENV_CLONE_FLAGS);
 
         DBG("[stage-2] execve(/proc/self/exe __init__) to start fresh runtime\n");
-        char *argv[] = { "gcr", "__init__", NULL };
+        char *argv[] = { "takoyaki", "__init__", NULL };
         execv("/proc/self/exe", argv);
         fprintf(stderr, "[stage-2] execv failed: %s\n", strerror(errno));
         _exit(1);
@@ -270,6 +270,6 @@ void gcr_bootstrap(void) {
 }
 
 __attribute__((visibility("default")))
-int gcr_is_init_process(void) {
+int takoyaki_is_init_process(void) {
     return is_init_process;
 }

@@ -27,7 +27,7 @@ dependencies {
 }
 
 application {
-    mainClass = "com.ternbusty.gcr.Main"
+    mainClass = "com.ternbusty.takoyaki.Main"
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -67,8 +67,8 @@ val isQuick = providers.gradleProperty("quick").isPresent
 graalvmNative {
     binaries {
         named("main") {
-            imageName = "gcr"
-            mainClass = "com.ternbusty.gcr.Main"
+            imageName = "takoyaki"
+            mainClass = "com.ternbusty.takoyaki.Main"
             quickBuild = isQuick
             buildArgs.addAll(
                 "--no-fallback",
@@ -78,7 +78,7 @@ graalvmNative {
                 "-H:NativeLinkerOption=-rdynamic",
                 "-H:NativeLinkerOption=-Wl,--whole-archive,${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a,--no-whole-archive",
                 "-H:NativeLinkerOption=-Wl,--push-state,--no-as-needed,-l:libseccomp.so.2,--pop-state",
-                "--features=com.ternbusty.gcr.nativeimage.ForeignFeature",
+                "--features=com.ternbusty.takoyaki.nativeimage.ForeignFeature",
                 "--enable-native-access=ALL-UNNAMED",
                 "--enable-preview",
             )
