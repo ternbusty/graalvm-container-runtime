@@ -20,6 +20,7 @@ public final class NamespaceFlags {
                 case "pid" -> Constants.CLONE_NEWPID;
                 case "user" -> Constants.CLONE_NEWUSER;
                 case "cgroup" -> Constants.CLONE_NEWCGROUP;
+                case "time" -> Constants.CLONE_NEWTIME;
                 default -> 0;
             };
         }

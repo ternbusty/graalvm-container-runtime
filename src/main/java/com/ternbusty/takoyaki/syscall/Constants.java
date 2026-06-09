@@ -10,6 +10,7 @@ public final class Constants {
     public static final int CLONE_NEWPID = 0x20000000;
     public static final int CLONE_NEWNET = 0x40000000;
     public static final int CLONE_NEWCGROUP = 0x02000000;
+    public static final int CLONE_NEWTIME = 0x00000080;
 
     public static final long MS_RDONLY = 1L;
     public static final long MS_NOSUID = 2L;

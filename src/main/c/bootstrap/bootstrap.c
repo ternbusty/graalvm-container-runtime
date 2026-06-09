@@ -28,6 +28,12 @@
 #ifndef CLONE_NEWNS
 #define CLONE_NEWNS 0x00020000
 #endif
+#ifndef CLONE_NEWCGROUP
+#define CLONE_NEWCGROUP 0x02000000
+#endif
+#ifndef CLONE_NEWTIME
+#define CLONE_NEWTIME 0x00000080
+#endif
 #ifndef CLONE_PARENT
 #define CLONE_PARENT 0x00008000
 #endif
@@ -196,6 +202,15 @@ void takoyaki_bootstrap(void) {
         DBG("[stage-1] now root in user namespace\n");
     }
 
+    /* cgroup namespace must be unshared BEFORE mount namespace so that the new mount
+     * namespace observes the cgroup namespace's view of /sys/fs/cgroup. */
+    if (clone_flags & CLONE_NEWCGROUP) {
+        DBG("[stage-1] unshare(CLONE_NEWCGROUP)\n");
+        if (unshare(CLONE_NEWCGROUP) < 0) {
+            fprintf(stderr, "[stage-1] unshare(CLONE_NEWCGROUP) failed: %s\n", strerror(errno));
+            exit(1);
+        }
+    }
     if (clone_flags & CLONE_NEWNS) {
         DBG("[stage-1] unshare(CLONE_NEWNS)\n");
         if (unshare(CLONE_NEWNS) < 0) {
@@ -221,6 +236,15 @@ void takoyaki_bootstrap(void) {
         DBG("[stage-1] unshare(CLONE_NEWIPC)\n");
         if (unshare(CLONE_NEWIPC) < 0) {
             fprintf(stderr, "[stage-1] unshare(CLONE_NEWIPC) failed: %s\n", strerror(errno));
+            exit(1);
+        }
+    }
+    /* time namespace must be unshared BEFORE pid namespace because once the new
+     * pid_for_children namespace is set the kernel won't accept time NS changes. */
+    if (clone_flags & CLONE_NEWTIME) {
+        DBG("[stage-1] unshare(CLONE_NEWTIME)\n");
+        if (unshare(CLONE_NEWTIME) < 0) {
+            fprintf(stderr, "[stage-1] unshare(CLONE_NEWTIME) failed: %s\n", strerror(errno));
             exit(1);
         }
     }
