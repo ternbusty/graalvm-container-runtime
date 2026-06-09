@@ -113,6 +113,8 @@ public final class Spec {
         public String source;
         public String type;
         public List<String> options;
+        public List<IdMapping> uidMappings;
+        public List<IdMapping> gidMappings;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -120,6 +122,7 @@ public final class Spec {
         public LinuxMemory memory;
         public LinuxCpu cpu;
         public LinuxPids pids;
+        public List<LinuxDeviceCgroup> devices;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -134,6 +137,10 @@ public final class Spec {
         public Long shares;
         public Long quota;
         public Long period;
+        public String cpus;
+        public String mems;
+        public Long realtimePeriod;
+        public Long realtimeRuntime;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -178,6 +185,21 @@ public final class Spec {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class LinuxDeviceCgroup {
+        public boolean allow;
+        public String type;
+        public Long major;
+        public Long minor;
+        public String access;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class TimeOffset {
+        public long secs;
+        public long nanosecs;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class Linux {
         public List<Namespace> namespaces;
         public List<IdMapping> uidMappings;
@@ -190,5 +212,6 @@ public final class Spec {
         public List<String> readonlyPaths;
         public String rootfsPropagation;
         public Map<String, String> sysctl;
+        public Map<String, TimeOffset> timeOffsets;
     }
 }

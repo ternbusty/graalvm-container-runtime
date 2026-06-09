@@ -19,9 +19,15 @@ public final class Constants {
     public static final long MS_REMOUNT = 32L;
     public static final long MS_BIND = 4096L;
     public static final long MS_REC = 16384L;
+    public static final long MS_NOATIME = 1024L;
+    public static final long MS_NODIRATIME = 2048L;
+    public static final long MS_RELATIME = 1L << 21;
+    public static final long MS_STRICTATIME = 1L << 24;
+    public static final long MS_NOSYMFOLLOW = 256L;
     public static final long MS_PRIVATE = 1L << 18;
     public static final long MS_SLAVE = 1L << 19;
     public static final long MS_SHARED = 1L << 20;
+    public static final long MS_UNBINDABLE = 1L << 17;
 
     public static final int MNT_DETACH = 2;
 
