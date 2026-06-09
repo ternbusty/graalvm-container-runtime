@@ -58,7 +58,9 @@ public final class Constants {
     public static final int ENOSYS = 38;
 
     public static final int AF_UNIX = 1;
+    public static final int AF_INET = 2;
     public static final int SOCK_STREAM = 1;
+    public static final int SOCK_DGRAM = 2;
     public static final int SOCK_SEQPACKET = 5;
 
     public static final int F_OK = 0;
@@ -97,6 +99,7 @@ public final class Constants {
     public static final int PR_CAP_AMBIENT = 47;
     public static final int PR_CAP_AMBIENT_RAISE = 2;
     public static final int PR_CAP_AMBIENT_CLEAR_ALL = 4;
+    public static final int PR_SET_CHILD_SUBREAPER = 36;
     public static final int CAP_LAST_CAP = 40;
 
     public static final int LINUX_CAPABILITY_VERSION_3 = 0x20080522;
@@ -105,4 +108,16 @@ public final class Constants {
     public static final long NR_capget = isAarch64() ? 90L : 125L;
     public static final long NR_close_range = isAarch64() ? 436L : 436L;
     public static final int CLOSE_RANGE_CLOEXEC = 4;
+
+    // ioctl request codes
+    public static final long SIOCGIFFLAGS = 0x8913L;
+    public static final long SIOCSIFFLAGS = 0x8914L;
+    public static final int IFF_UP = 0x1;
+    public static final int IFF_LOOPBACK = 0x8;
+    public static final int IFF_RUNNING = 0x40;
+
+    // mknod / stat mode bits
+    public static final int S_IFCHR = 0020000;
+    public static final int S_IFBLK = 0060000;
+    public static final int S_IFIFO = 0010000;
 }

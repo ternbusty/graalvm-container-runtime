@@ -79,6 +79,18 @@ public final class Libc {
             FunctionDescriptor.of(ValueLayout.JAVA_INT));
     private static final MethodHandle GETEGID = downcall("getegid",
             FunctionDescriptor.of(ValueLayout.JAVA_INT));
+    private static final MethodHandle SETRESUID = downcall("setresuid",
+            FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+    private static final MethodHandle SETRESGID = downcall("setresgid",
+            FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+    private static final MethodHandle MKNOD = downcall("mknod",
+            FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                    ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+    private static final MethodHandle IOCTL = downcall("ioctl",
+            FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                    ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
 
     public static int unshare(int flags) {
         try {
@@ -255,6 +267,26 @@ public final class Libc {
 
     public static int getegid() {
         try { return (int) GETEGID.invoke(); }
+        catch (Throwable t) { throw sneaky(t); }
+    }
+
+    public static int setresuid(int ruid, int euid, int suid) {
+        try { return (int) SETRESUID.invoke(ruid, euid, suid); }
+        catch (Throwable t) { throw sneaky(t); }
+    }
+
+    public static int setresgid(int rgid, int egid, int sgid) {
+        try { return (int) SETRESGID.invoke(rgid, egid, sgid); }
+        catch (Throwable t) { throw sneaky(t); }
+    }
+
+    public static int mknod(Arena arena, String path, int mode, long dev) {
+        try { return (int) MKNOD.invoke(arena.allocateFrom(path), mode, dev); }
+        catch (Throwable t) { throw sneaky(t); }
+    }
+
+    public static int ioctl(int fd, long request, MemorySegment arg) {
+        try { return (int) IOCTL.invoke(fd, request, arg); }
         catch (Throwable t) { throw sneaky(t); }
     }
 

@@ -95,6 +95,17 @@ public final class ForeignFeature implements Feature {
         reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
                 ValueLayout.JAVA_INT));
+        // (int,int,int)->int  (setresuid / setresgid)
+        // already covered above by socket() signature
+        // (ptr,int,long)->int  (mknod)
+        reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
+        // (int,long,ptr)->int  (ioctl)
+        reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
+        // (int,ptr,int)->int  (waitpid)
+        reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
         // (ptr,int,long)->int  (seccomp_attr_set)
         reg(FunctionDescriptor.of(ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
