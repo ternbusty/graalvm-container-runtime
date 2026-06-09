@@ -2,6 +2,7 @@ package com.ternbusty.takoyaki.process;
 
 import com.ternbusty.takoyaki.apparmor.AppArmor;
 import com.ternbusty.takoyaki.capability.Capability;
+import com.ternbusty.takoyaki.console.ConsoleSocket;
 import com.ternbusty.takoyaki.ipc.NotifySocket;
 import com.ternbusty.takoyaki.ipc.SyncChannel;
 import com.ternbusty.takoyaki.logger.Logger;
@@ -178,8 +179,32 @@ public final class InitProcess {
                 Seccomp.apply(spec.linux.seccomp);
             }
 
+            // PTY setup: if process.terminal is true and a console socket was passed,
+            // open a pty, ship the master to the console socket, and wire stdio to
+            // the slave. The new session leadership has to happen before wiring so the
+            // slave can become the controlling terminal of this process.
+            String consoleSocketPath = System.getenv("_TAKOYAKI_CONSOLE_SOCKET");
+            boolean wantTerminal = spec.process != null && Boolean.TRUE.equals(spec.process.terminal);
+            int ptySlave = -1;
+            if (wantTerminal && consoleSocketPath != null) {
+                ConsoleSocket.PtyPair pty = ConsoleSocket.openPty();
+                if (pty != null) {
+                    if (!ConsoleSocket.sendMasterTo(consoleSocketPath, pty.master)) {
+                        Logger.warn("failed to ship pty master, falling back to no-tty");
+                    } else {
+                        Logger.debug("pty master sent to " + consoleSocketPath);
+                        ptySlave = pty.slave;
+                    }
+                    PosixIO.close(pty.master);
+                }
+            }
+
             SyncChannel.writeInt32(mainSenderFd, SyncChannel.MSG_INIT_READY);
             PosixIO.close(mainSenderFd);
+
+            if (ptySlave >= 0) {
+                ConsoleSocket.wireStdio(ptySlave);
+            }
 
             CloseRange.closeAllAbove(0);
 

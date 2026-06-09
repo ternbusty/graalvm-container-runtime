@@ -113,6 +113,7 @@ public final class CreateCommand implements Callable<Integer> {
         envList.add("_TAKOYAKI_BUNDLE_PATH=" + bundle);
         envList.add("_TAKOYAKI_ROOTFS_PATH=" + rootfsPath);
         if (root.debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
+        if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         String[] envp = envList.toArray(new String[0]);
         String[] argv = new String[]{exePath, "__init__"};
 
