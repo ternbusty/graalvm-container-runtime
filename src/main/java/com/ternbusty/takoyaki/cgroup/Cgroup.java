@@ -35,13 +35,22 @@ public final class Cgroup {
         } catch (IOException e) {
             Logger.warn("add pid to cgroup failed: " + e.getMessage());
         }
+
+        // eBPF device cgroup for resources.devices (cgroup v2 only path).
+        if (linux != null && linux.resources != null && linux.resources.devices != null
+                && !linux.resources.devices.isEmpty()) {
+            DeviceCgroup.apply(cgroupPath, linux.resources.devices);
+        }
     }
 
     private static void enableControllers(Path full, Spec.LinuxResources r) {
         java.util.List<String> needed = new java.util.ArrayList<>();
         if (r != null) {
             if (r.memory != null) needed.add("memory");
-            if (r.cpu != null) needed.add("cpu");
+            if (r.cpu != null) {
+                needed.add("cpu");
+                if (r.cpu.cpus != null || r.cpu.mems != null) needed.add("cpuset");
+            }
             if (r.pids != null) needed.add("pids");
         }
         if (needed.isEmpty()) return;
@@ -85,6 +94,12 @@ public final class Cgroup {
                     r.memory.reservation == -1L ? "max" : r.memory.reservation.toString());
         }
         if (r.cpu != null) {
+            if (r.cpu.cpus != null && !r.cpu.cpus.isEmpty()) {
+                writeIfPossible(full.resolve("cpuset.cpus"), r.cpu.cpus);
+            }
+            if (r.cpu.mems != null && !r.cpu.mems.isEmpty()) {
+                writeIfPossible(full.resolve("cpuset.mems"), r.cpu.mems);
+            }
             if (r.cpu.shares != null && r.cpu.shares > 0) {
                 long w = 1 + ((r.cpu.shares - 2L) * 9999L / 262142L);
                 if (w > 10000L) w = 10000L;
