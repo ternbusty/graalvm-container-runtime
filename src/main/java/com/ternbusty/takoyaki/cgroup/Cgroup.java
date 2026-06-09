@@ -64,6 +64,12 @@ public final class Cgroup {
         }
     }
 
+    /** Re-apply resource limits to an existing cgroup (e.g. via `update`). */
+    public static void applyLimitsOnly(String cgroupPath, Spec.LinuxResources r) {
+        String norm = cgroupPath.startsWith("/") ? cgroupPath.substring(1) : cgroupPath;
+        applyLimits(Path.of(CGROUP_ROOT, norm), r);
+    }
+
     private static void applyLimits(Path full, Spec.LinuxResources r) {
         if (r == null) return;
         if (r.memory != null) {
