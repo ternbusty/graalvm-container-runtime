@@ -1,0 +1,39 @@
+package io.github.ternbusty.gcr.ipc;
+
+import io.github.ternbusty.gcr.syscall.Libc;
+import io.github.ternbusty.gcr.syscall.PosixIO;
+
+import java.lang.foreign.Arena;
+
+public final class SyncChannel {
+    public static final int MSG_INIT_READY = 0x50;
+    public static final int MSG_USERMAP_PLS = 0x40;
+    public static final int MSG_USERMAP_ACK = 0x41;
+
+    private SyncChannel() {}
+
+    public static int readInt32(int fd) {
+        try (Arena arena = Arena.ofConfined()) {
+            byte[] b = new byte[4];
+            long n = PosixIO.read(arena, fd, b);
+            if (n != 4) {
+                throw new RuntimeException("readInt32 got " + n + " bytes (errno=" +
+                        Libc.errno() + " " + Libc.strerror(Libc.errno()) + ")");
+            }
+            return (b[0] & 0xff) | ((b[1] & 0xff) << 8) | ((b[2] & 0xff) << 16) | ((b[3] & 0xff) << 24);
+        }
+    }
+
+    public static void writeInt32(int fd, int value) {
+        try (Arena arena = Arena.ofConfined()) {
+            byte[] b = new byte[]{
+                    (byte) (value & 0xff),
+                    (byte) ((value >> 8) & 0xff),
+                    (byte) ((value >> 16) & 0xff),
+                    (byte) ((value >> 24) & 0xff),
+            };
+            long n = PosixIO.write(arena, fd, b);
+            if (n != 4) throw new RuntimeException("writeInt32 wrote " + n + " bytes");
+        }
+    }
+}
