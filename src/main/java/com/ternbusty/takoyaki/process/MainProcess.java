@@ -60,8 +60,22 @@ public final class MainProcess {
                         Logger.warn("setgroups write failed: " + e.getMessage());
                     }
                 }
-                Files.writeString(Path.of("/proc/" + bootstrapPid + "/uid_map"), uidMap);
-                Files.writeString(Path.of("/proc/" + bootstrapPid + "/gid_map"), gidMap);
+                // Rootless path: writing maps with multiple ranges requires the
+                // newuidmap/newgidmap setuid helpers from shadow-utils.
+                boolean wroteViaHelper = false;
+                if (!privileged && spec.linux != null
+                        && (multiRange(spec.linux.uidMappings) || multiRange(spec.linux.gidMappings))) {
+                    Logger.debug("rootless detected, attempting newuidmap/newgidmap");
+                    wroteViaHelper =
+                            com.ternbusty.takoyaki.rootless.Rootless.writeUidMap(bootstrapPid,
+                                    spec.linux.uidMappings)
+                            && com.ternbusty.takoyaki.rootless.Rootless.writeGidMap(bootstrapPid,
+                                    spec.linux.gidMappings);
+                }
+                if (!wroteViaHelper) {
+                    Files.writeString(Path.of("/proc/" + bootstrapPid + "/uid_map"), uidMap);
+                    Files.writeString(Path.of("/proc/" + bootstrapPid + "/gid_map"), gidMap);
+                }
 
                 SyncChannel.writeInt32(syncFd, SyncChannel.MSG_USERMAP_ACK);
                 Logger.debug("user map written");
@@ -125,6 +139,10 @@ public final class MainProcess {
               .append(m.size).append('\n');
         }
         return sb.toString();
+    }
+
+    private static boolean multiRange(List<Spec.IdMapping> m) {
+        return m != null && m.size() > 0 && (m.size() > 1 || m.get(0).size > 1);
     }
 
     private static long uidFromProc() {
