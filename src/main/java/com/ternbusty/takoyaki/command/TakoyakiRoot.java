@@ -14,6 +14,13 @@ import picocli.CommandLine.Option;
                 StateCommand.class,
                 KillCommand.class,
                 DeleteCommand.class,
+                ListCommand.class,
+                PsCommand.class,
+                PauseCommand.class,
+                ResumeCommand.class,
+                UpdateCommand.class,
+                EventsCommand.class,
+                ExecCommand.class,
         }
 )
 public final class TakoyakiRoot {
