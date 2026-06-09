@@ -2,6 +2,7 @@ package com.ternbusty.takoyaki.process;
 
 import com.ternbusty.takoyaki.cgroup.Cgroup;
 import com.ternbusty.takoyaki.config.KontainerConfig;
+import com.ternbusty.takoyaki.hooks.Hooks;
 import com.ternbusty.takoyaki.ipc.SyncChannel;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
@@ -88,6 +89,14 @@ public final class MainProcess {
 
             new KontainerConfig(spec.linux != null ? spec.linux.cgroupsPath : null)
                     .save(rootPath, containerId);
+
+            // prestart (deprecated, but still emitted by some tools) and createRuntime hooks
+            // both fire in the runtime namespace after the container is configured but
+            // before the user process is started.
+            if (spec.hooks != null) {
+                Hooks.run(spec.hooks.prestart, state, "prestart");
+                Hooks.run(spec.hooks.createRuntime, state, "createRuntime");
+            }
 
             if (pidFile != null) {
                 Files.writeString(Path.of(pidFile), Integer.toString(stage2Pid));

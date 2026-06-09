@@ -2,10 +2,13 @@ package com.ternbusty.takoyaki.command;
 
 import com.ternbusty.takoyaki.cgroup.Cgroup;
 import com.ternbusty.takoyaki.config.KontainerConfig;
+import com.ternbusty.takoyaki.hooks.Hooks;
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
 import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.util.Json;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -67,6 +70,14 @@ public final class DeleteCommand implements Callable<Integer> {
             Files.deleteIfExists(Path.of("/tmp/takoyaki-" + containerId + ".sock"));
         } catch (IOException e) {
             Logger.warn("failed to remove notify socket: " + e.getMessage());
+        }
+
+        // poststop hook fires in the runtime namespace before we remove the state dir.
+        try {
+            Spec spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec.class);
+            if (spec.hooks != null) Hooks.run(spec.hooks.poststop, state, "poststop");
+        } catch (IOException ignored) {
+            // bundle may already be gone for stopped containers; skip silently
         }
 
         Path dir = State.containerDir(root.rootPath, containerId);
