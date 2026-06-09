@@ -57,11 +57,8 @@ public final class InitProcess {
         }
 
         try (Arena arena = Arena.ofConfined()) {
-            // Preload libseccomp.so.2 before pivot_root, otherwise we can't reach the
-            // shared library on the host filesystem after the container rootfs is in place.
-            if (spec.linux != null && spec.linux.seccomp != null) {
-                Seccomp.preload();
-            }
+            // libseccomp.so.2 is linked at NEEDED so ld.so loads it at process startup,
+            // before pivot_root replaces the rootfs. No explicit preload required.
 
             if (spec.hasNamespace("mount")) {
                 Rootfs.prepare(rootfsPath, spec);

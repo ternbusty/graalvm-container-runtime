@@ -77,6 +77,7 @@ graalvmNative {
                 "-H:NativeLinkerOption=${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a",
                 "-H:NativeLinkerOption=-rdynamic",
                 "-H:NativeLinkerOption=-Wl,--whole-archive,${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a,--no-whole-archive",
+                "-H:NativeLinkerOption=-Wl,--push-state,--no-as-needed,-l:libseccomp.so.2,--pop-state",
                 "--features=com.ternbusty.gcr.nativeimage.ForeignFeature",
                 "--enable-native-access=ALL-UNNAMED",
                 "--enable-preview",
