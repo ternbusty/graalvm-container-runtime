@@ -21,7 +21,9 @@ public final class Seccomp {
     private static volatile MethodHandle SECCOMP_INIT;
     private static volatile MethodHandle SECCOMP_RELEASE;
     private static volatile MethodHandle SECCOMP_RULE_ADD;
+    private static volatile MethodHandle SECCOMP_RULE_ADD_ARRAY;
     private static volatile MethodHandle SECCOMP_LOAD;
+    private static volatile MethodHandle SECCOMP_NOTIFY_FD;
     private static volatile MethodHandle SECCOMP_SYSCALL_RESOLVE_NAME;
     private static volatile MethodHandle SECCOMP_ARCH_ADD;
     private static volatile MethodHandle SECCOMP_ARCH_REMOVE;
@@ -45,7 +47,16 @@ public final class Seccomp {
                     FunctionDescriptor.of(ValueLayout.JAVA_INT,
                             ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
                             ValueLayout.JAVA_INT));
+            // int seccomp_rule_add_array(scmp_filter_ctx, uint32_t action, int syscall,
+            //                            unsigned int arg_cnt, const struct scmp_arg_cmp *arg_array);
+            SECCOMP_RULE_ADD_ARRAY = LINKER.downcallHandle(
+                    s.find("seccomp_rule_add_array").orElseThrow(),
+                    FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                            ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT,
+                            ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
             SECCOMP_LOAD = LINKER.downcallHandle(s.find("seccomp_load").orElseThrow(),
+                    FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+            SECCOMP_NOTIFY_FD = LINKER.downcallHandle(s.find("seccomp_notify_fd").orElseThrow(),
                     FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
             SECCOMP_SYSCALL_RESOLVE_NAME = LINKER.downcallHandle(s.find("seccomp_syscall_resolve_name").orElseThrow(),
                     FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
@@ -106,7 +117,12 @@ public final class Seccomp {
                                 Logger.debug("syscall " + name + " not supported, skipping");
                                 continue;
                             }
-                            int rc = (int) SECCOMP_RULE_ADD.invoke(ctx, action, nr, 0);
+                            int rc;
+                            if (sc.args == null || sc.args.isEmpty()) {
+                                rc = (int) SECCOMP_RULE_ADD.invoke(ctx, action, nr, 0);
+                            } else {
+                                rc = addRuleWithArgs(arena, ctx, action, nr, sc.args);
+                            }
                             if (rc != 0) {
                                 Logger.debug("rule_add " + name + " failed: " + rc);
                             }
@@ -117,8 +133,27 @@ public final class Seccomp {
                 int loadRc = (int) SECCOMP_LOAD.invoke(ctx);
                 if (loadRc != 0) {
                     Logger.error("seccomp_load failed: " + loadRc);
-                } else {
-                    Logger.info("seccomp filter loaded");
+                    return;
+                }
+                Logger.info("seccomp filter loaded");
+
+                // If the spec declared any SCMP_ACT_NOTIFY rules, pull the notify fd
+                // out of the loaded context. We don't manage a listener — that's the
+                // caller's responsibility — but make the fd reachable via env var.
+                boolean hasNotify = false;
+                if (sec.syscalls != null) {
+                    for (Spec.LinuxSyscall sc : sec.syscalls) {
+                        if ("SCMP_ACT_NOTIFY".equals(sc.action)) { hasNotify = true; break; }
+                    }
+                }
+                if (hasNotify) {
+                    int notifyFd = (int) SECCOMP_NOTIFY_FD.invoke(ctx);
+                    if (notifyFd < 0) {
+                        Logger.warn("seccomp_notify_fd returned " + notifyFd);
+                    } else {
+                        Logger.info("seccomp notify fd=" + notifyFd
+                                + " (forward via SCM_RIGHTS to listenerPath)");
+                    }
                 }
             } finally {
                 SECCOMP_RELEASE.invoke(ctx);
@@ -126,6 +161,41 @@ public final class Seccomp {
         } catch (Throwable t) {
             Logger.error("seccomp apply error: " + t.getMessage());
         }
+    }
+
+    /**
+     * Encode SeccompArg entries into struct scmp_arg_cmp[] and call seccomp_rule_add_array.
+     * struct scmp_arg_cmp layout: unsigned int arg; enum scmp_compare op; uint64_t datum_a; uint64_t datum_b;
+     * Padding bumps the struct to 24 bytes on aarch64/x86_64.
+     */
+    private static int addRuleWithArgs(Arena arena, MemorySegment ctx, int action, int nr,
+                                       java.util.List<Spec.SeccompArg> args) throws Throwable {
+        int n = args.size();
+        MemorySegment arr = arena.allocate(24L * n);
+        for (int i = 0; i < n; i++) {
+            Spec.SeccompArg a = args.get(i);
+            long base = 24L * i;
+            arr.set(ValueLayout.JAVA_INT, base, a.index);
+            arr.set(ValueLayout.JAVA_INT, base + 4, mapCompare(a.op));
+            arr.set(ValueLayout.JAVA_LONG, base + 8, a.value);
+            arr.set(ValueLayout.JAVA_LONG, base + 16,
+                    a.valueTwo == null ? 0 : a.valueTwo);
+        }
+        return (int) SECCOMP_RULE_ADD_ARRAY.invoke(ctx, action, nr, n, arr);
+    }
+
+    private static int mapCompare(String op) {
+        if (op == null) return 0;
+        return switch (op) {
+            case "SCMP_CMP_NE" -> 1;
+            case "SCMP_CMP_LT" -> 2;
+            case "SCMP_CMP_LE" -> 3;
+            case "SCMP_CMP_EQ" -> 4;
+            case "SCMP_CMP_GE" -> 5;
+            case "SCMP_CMP_GT" -> 6;
+            case "SCMP_CMP_MASKED_EQ" -> 7;
+            default -> 0;
+        };
     }
 
     private static int actionToken(String action, Long errnoRet) {
