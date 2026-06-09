@@ -5,12 +5,14 @@ import com.ternbusty.takoyaki.capability.Capability;
 import com.ternbusty.takoyaki.console.ConsoleSocket;
 import com.ternbusty.takoyaki.ipc.NotifySocket;
 import com.ternbusty.takoyaki.ipc.SyncChannel;
+import com.ternbusty.takoyaki.keyring.Keyring;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.network.Loopback;
 import com.ternbusty.takoyaki.rootfs.Devices;
 import com.ternbusty.takoyaki.rootfs.Rootfs;
 import com.ternbusty.takoyaki.rootfs.UserDb;
 import com.ternbusty.takoyaki.seccomp.Seccomp;
+import com.ternbusty.takoyaki.selinux.SeLinux;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.syscall.CloseRange;
 import com.ternbusty.takoyaki.syscall.Constants;
@@ -18,6 +20,7 @@ import com.ternbusty.takoyaki.syscall.Groups;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 import com.ternbusty.takoyaki.sysctl.Sysctl;
+import com.ternbusty.takoyaki.time.TimeNs;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.lang.foreign.Arena;
@@ -70,6 +73,12 @@ public final class InitProcess {
             // (PID 1 inside the container's pid namespace).
             if (Libc.prctl(Constants.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0) {
                 Logger.debug("PR_SET_CHILD_SUBREAPER failed: " + Libc.strerror(Libc.errno()));
+            }
+
+            // Apply linux.timeOffsets — must be done in the new time namespace
+            // before any further forks (we're still single-threaded here).
+            if (spec.linux != null && spec.hasNamespace("time")) {
+                TimeNs.applyOffsets(spec.linux.timeOffsets);
             }
 
             if (spec.hasNamespace("mount")) {
@@ -168,11 +177,20 @@ public final class InitProcess {
                 Logger.debug("PR_SET_DUMPABLE,0 failed: " + Libc.strerror(Libc.errno()));
             }
 
-            // AppArmor profile must be staged BEFORE seccomp/execve. With no_new_privs the
-            // kernel rejects further label changes after exec(2), so this is the latest
-            // safe point to do it (after dropping privileges, before seccomp filter).
+            // AppArmor and SELinux labels must be staged BEFORE seccomp/execve. With
+            // no_new_privs the kernel rejects further label changes after exec(2), so
+            // this is the latest safe point to do it.
             if (spec.process != null && spec.process.apparmorProfile != null) {
                 AppArmor.apply(spec.process.apparmorProfile);
+            }
+            if (spec.process != null && spec.process.selinuxLabel != null) {
+                SeLinux.apply(spec.process.selinuxLabel);
+            }
+
+            // Join a fresh kernel session keyring unless the caller opted out via
+            // --no-new-keyring (we propagate that via env var).
+            if (!"1".equals(System.getenv("_TAKOYAKI_NO_NEW_KEYRING"))) {
+                Keyring.joinNewSession("takoyaki-" + Libc.getpid());
             }
 
             if (spec.linux != null && spec.linux.seccomp != null) {
