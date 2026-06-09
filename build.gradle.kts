@@ -5,7 +5,7 @@ plugins {
     id("org.graalvm.buildtools.native") version "0.11.1"
 }
 
-group = "io.github.ternbusty"
+group = "com.ternbusty"
 version = "0.1.0-SNAPSHOT"
 
 repositories {
@@ -27,7 +27,7 @@ dependencies {
 }
 
 application {
-    mainClass = "io.github.ternbusty.gcr.Main"
+    mainClass = "com.ternbusty.gcr.Main"
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -68,7 +68,7 @@ graalvmNative {
     binaries {
         named("main") {
             imageName = "gcr"
-            mainClass = "io.github.ternbusty.gcr.Main"
+            mainClass = "com.ternbusty.gcr.Main"
             quickBuild = isQuick
             buildArgs.addAll(
                 "--no-fallback",
@@ -77,7 +77,7 @@ graalvmNative {
                 "-H:NativeLinkerOption=${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a",
                 "-H:NativeLinkerOption=-rdynamic",
                 "-H:NativeLinkerOption=-Wl,--whole-archive,${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a,--no-whole-archive",
-                "--features=io.github.ternbusty.gcr.nativeimage.ForeignFeature",
+                "--features=com.ternbusty.gcr.nativeimage.ForeignFeature",
                 "--enable-native-access=ALL-UNNAMED",
                 "--enable-preview",
             )

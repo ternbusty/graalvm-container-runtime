@@ -1,0 +1,22 @@
+[
+  {"name": "com.ternbusty.gcr.spec.Spec", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$Root", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$Process", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$User", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$Namespace", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$IdMapping", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$Linux", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$POSIXRlimit", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxCapabilities", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$Mount", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxResources", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxMemory", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxCpu", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxPids", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$SeccompArg", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxSyscall", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxSeccomp", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.spec.Spec$LinuxDevice", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.state.State", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.gcr.config.KontainerConfig", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true}
+]
