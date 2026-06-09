@@ -56,6 +56,15 @@ public final class CreateCommand implements Callable<Integer> {
             return 1;
         }
 
+        // Resolve bundle to an absolute path so later commands (start/delete) can
+        // re-open config.json regardless of their cwd.
+        try {
+            bundle = Path.of(bundle).toAbsolutePath().normalize().toString();
+        } catch (Exception e) {
+            Logger.error("invalid bundle path: " + e.getMessage());
+            return 1;
+        }
+
         Spec spec;
         try {
             spec = Json.readFile(Path.of(bundle, "config.json"), Spec.class);

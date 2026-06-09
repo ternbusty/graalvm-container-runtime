@@ -306,11 +306,14 @@ public final class Rootfs {
 
     public static void setRootReadonly() {
         try (Arena arena = Arena.ofConfined()) {
-            long flags = Constants.MS_BIND | Constants.MS_REMOUNT | Constants.MS_RDONLY;
+            // Preserve MS_NOSUID we set earlier — MS_REMOUNT replaces the flag set
+            // wholesale, so we must include every flag we want to keep on.
+            long flags = Constants.MS_BIND | Constants.MS_REMOUNT
+                    | Constants.MS_RDONLY | Constants.MS_NOSUID;
             if (Libc.mount(arena, null, "/", null, flags, null) != 0) {
                 Logger.warn("remount / readonly failed: " + Libc.strerror(Libc.errno()));
             } else {
-                Logger.debug("/ set readonly");
+                Logger.debug("/ set readonly+nosuid");
             }
         }
     }
