@@ -1,10 +1,14 @@
 package com.ternbusty.takoyaki.process;
 
+import com.ternbusty.takoyaki.apparmor.AppArmor;
 import com.ternbusty.takoyaki.capability.Capability;
 import com.ternbusty.takoyaki.ipc.NotifySocket;
 import com.ternbusty.takoyaki.ipc.SyncChannel;
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.network.Loopback;
+import com.ternbusty.takoyaki.rootfs.Devices;
 import com.ternbusty.takoyaki.rootfs.Rootfs;
+import com.ternbusty.takoyaki.rootfs.UserDb;
 import com.ternbusty.takoyaki.seccomp.Seccomp;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.syscall.CloseRange;
@@ -12,6 +16,7 @@ import com.ternbusty.takoyaki.syscall.Constants;
 import com.ternbusty.takoyaki.syscall.Groups;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
+import com.ternbusty.takoyaki.sysctl.Sysctl;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.lang.foreign.Arena;
@@ -60,11 +65,31 @@ public final class InitProcess {
             // libseccomp.so.2 is linked at NEEDED so ld.so loads it at process startup,
             // before pivot_root replaces the rootfs. No explicit preload required.
 
+            // Become subreaper so orphaned descendants are reaped by this init
+            // (PID 1 inside the container's pid namespace).
+            if (Libc.prctl(Constants.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0) {
+                Logger.debug("PR_SET_CHILD_SUBREAPER failed: " + Libc.strerror(Libc.errno()));
+            }
+
             if (spec.hasNamespace("mount")) {
                 Rootfs.prepare(rootfsPath, spec);
+                // Additional devices declared in spec.linux.devices, before pivot_root.
+                if (spec.linux != null && spec.linux.devices != null) {
+                    Devices.create(rootfsPath, spec.linux.devices);
+                }
                 Rootfs.pivot(rootfsPath);
             } else {
                 Logger.debug("no mount namespace, skipping rootfs prep");
+            }
+
+            // Bring up loopback so localhost works inside the network namespace.
+            if (spec.hasNamespace("network")) {
+                Loopback.up();
+            }
+
+            // Apply spec.linux.sysctl after mounts are in place (so /proc/sys is visible).
+            if (spec.linux != null && spec.linux.sysctl != null) {
+                Sysctl.apply(spec.linux.sysctl);
             }
 
             String cwd = spec.process != null && spec.process.cwd != null ? spec.process.cwd : "/";
@@ -78,6 +103,19 @@ public final class InitProcess {
                 } else {
                     Logger.debug("hostname set to " + spec.hostname);
                 }
+            }
+
+            // Mask sensitive paths and remount others read-only BEFORE the root is made RO,
+            // so the bind / remount itself can still succeed.
+            if (spec.linux != null) {
+                Rootfs.maskPaths(spec.linux.maskedPaths);
+                Rootfs.readonlyRemount(spec.linux.readonlyPaths);
+            }
+
+            // Generate /etc/passwd and /etc/group entries while still writable.
+            if (spec.process != null) {
+                UserDb.ensure(spec.process.user,
+                        spec.process.user == null ? null : spec.process.user.additionalGids);
             }
 
             if (spec.root != null && spec.root.readonly) {
@@ -109,17 +147,31 @@ public final class InitProcess {
 
             int targetGid = spec.process != null && spec.process.user != null ? spec.process.user.gid : 0;
             int targetUid = spec.process != null && spec.process.user != null ? spec.process.user.uid : 0;
-            if (Libc.setgid(targetGid) != 0) {
-                Logger.warn("setgid " + targetGid + " failed: " + Libc.strerror(Libc.errno()));
+            // setresgid/setresuid drops real/effective/saved IDs all at once so the
+            // process can't restore privileges via saved UID.
+            if (Libc.setresgid(targetGid, targetGid, targetGid) != 0) {
+                Logger.warn("setresgid " + targetGid + " failed: " + Libc.strerror(Libc.errno()));
             }
-            if (Libc.setuid(targetUid) != 0) {
-                Logger.warn("setuid " + targetUid + " failed: " + Libc.strerror(Libc.errno()));
+            if (Libc.setresuid(targetUid, targetUid, targetUid) != 0) {
+                Logger.warn("setresuid " + targetUid + " failed: " + Libc.strerror(Libc.errno()));
             }
             Logger.debug("set uid=" + targetUid + " gid=" + targetGid);
 
             if (caps != null) {
                 Capability.clearKeepCaps();
                 Capability.applyFinalSets(caps);
+            }
+
+            // Re-set non-dumpable so /proc inspection by attached processes can't leak.
+            if (Libc.prctl(Constants.PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+                Logger.debug("PR_SET_DUMPABLE,0 failed: " + Libc.strerror(Libc.errno()));
+            }
+
+            // AppArmor profile must be staged BEFORE seccomp/execve. With no_new_privs the
+            // kernel rejects further label changes after exec(2), so this is the latest
+            // safe point to do it (after dropping privileges, before seccomp filter).
+            if (spec.process != null && spec.process.apparmorProfile != null) {
+                AppArmor.apply(spec.process.apparmorProfile);
             }
 
             if (spec.linux != null && spec.linux.seccomp != null) {
