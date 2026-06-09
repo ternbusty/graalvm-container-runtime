@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class Spec {
@@ -13,6 +14,8 @@ public final class Spec {
     public String hostname;
     public Linux linux;
     public List<Mount> mounts;
+    public Hooks hooks;
+    public Map<String, String> annotations;
 
     public boolean hasNamespace(String type) {
         if (linux == null || linux.namespaces == null) return false;
@@ -38,6 +41,34 @@ public final class Spec {
         public LinuxCapabilities capabilities;
         public List<POSIXRlimit> rlimits;
         public Long umask;
+        public String apparmorProfile;
+        public String selinuxLabel;
+        public Boolean terminal;
+        public Box consoleSize;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class Box {
+        public int height;
+        public int width;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class Hook {
+        public String path;
+        public List<String> args;
+        public List<String> env;
+        public Long timeout;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class Hooks {
+        public List<Hook> prestart;
+        public List<Hook> createRuntime;
+        public List<Hook> createContainer;
+        public List<Hook> startContainer;
+        public List<Hook> poststart;
+        public List<Hook> poststop;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -158,5 +189,6 @@ public final class Spec {
         public List<String> maskedPaths;
         public List<String> readonlyPaths;
         public String rootfsPropagation;
+        public Map<String, String> sysctl;
     }
 }

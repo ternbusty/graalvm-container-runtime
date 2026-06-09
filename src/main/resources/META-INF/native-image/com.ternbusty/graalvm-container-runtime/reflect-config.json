@@ -17,6 +17,9 @@
   {"name": "com.ternbusty.takoyaki.spec.Spec$LinuxSyscall", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
   {"name": "com.ternbusty.takoyaki.spec.Spec$LinuxSeccomp", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
   {"name": "com.ternbusty.takoyaki.spec.Spec$LinuxDevice", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.takoyaki.spec.Spec$Box", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.takoyaki.spec.Spec$Hook", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
+  {"name": "com.ternbusty.takoyaki.spec.Spec$Hooks", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
   {"name": "com.ternbusty.takoyaki.state.State", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true},
   {"name": "com.ternbusty.takoyaki.config.KontainerConfig", "allDeclaredFields": true, "allDeclaredMethods": true, "allDeclaredConstructors": true}
 ]
