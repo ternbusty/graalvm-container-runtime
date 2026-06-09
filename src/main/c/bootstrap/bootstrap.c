@@ -79,10 +79,45 @@ static unsigned int getenv_uint_hex(const char *name) {
     return parse_hex(val);
 }
 
+/* clone3 args struct (subset that we use). The kernel struct is versioned by length. */
+struct takoyaki_clone_args {
+    unsigned long flags;
+    unsigned long pidfd;
+    unsigned long child_tid;
+    unsigned long parent_tid;
+    unsigned long exit_signal;
+    unsigned long stack;
+    unsigned long stack_size;
+    unsigned long tls;
+    unsigned long set_tid;
+    unsigned long set_tid_size;
+    unsigned long cgroup;
+};
+
+#ifndef __NR_clone3
+# if defined(__aarch64__)
+#  define __NR_clone3 435
+# else
+#  define __NR_clone3 435
+# endif
+#endif
+
+/* Try clone3 first (provides CLONE_PIDFD and a tidy interface) and fall back to clone
+ * if the kernel is too old. The returned pidfd is currently unused but the migration
+ * to clone3 is cheap and brings us in line with modern runtimes. */
 static pid_t clone_parent(void) {
+    struct takoyaki_clone_args ca = {0};
+    ca.flags = CLONE_PARENT;
+    ca.exit_signal = SIGCHLD;
+    long rc = syscall(__NR_clone3, &ca, sizeof(ca));
+    if (rc >= 0) return (pid_t) rc;
+    if (errno != ENOSYS && errno != EINVAL) {
+        fprintf(stderr, "[clone_parent] clone3 failed: %s, falling back to clone\n",
+                strerror(errno));
+    }
     pid_t pid = syscall(SYS_clone, SIGCHLD | CLONE_PARENT, NULL, NULL, NULL, NULL);
     if (pid < 0) {
-        fprintf(stderr, "[clone_parent] failed: %s\n", strerror(errno));
+        fprintf(stderr, "[clone_parent] clone failed: %s\n", strerror(errno));
     }
     return pid;
 }
