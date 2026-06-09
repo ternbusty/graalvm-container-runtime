@@ -44,6 +44,14 @@ public final class Rootfs {
                     Constants.MS_PRIVATE, null) != 0) {
                 Logger.debug("set rootfs private failed: " + Libc.strerror(Libc.errno()));
             }
+            // Remount rootfs with MS_NOSUID so setuid binaries inside the container
+            // can't gain extra privileges through the host's mount layer.
+            if (Libc.mount(arena, null, rootfsPath, null,
+                    Constants.MS_BIND | Constants.MS_REMOUNT | Constants.MS_NOSUID, null) != 0) {
+                Logger.debug("rootfs MS_NOSUID remount failed: " + Libc.strerror(Libc.errno()));
+            } else {
+                Logger.debug("rootfs marked MS_NOSUID");
+            }
 
             mountProc(arena, rootfsPath);
             mountDev(arena, rootfsPath);
@@ -203,6 +211,7 @@ public final class Rootfs {
             String type = m.type != null ? m.type : "none";
             boolean isBind = m.options != null && (m.options.contains("bind") || m.options.contains("rbind"));
             long flags = 0;
+            long propagation = 0;
             StringBuilder data = new StringBuilder();
             if (m.options != null) {
                 for (String o : m.options) {
@@ -213,7 +222,19 @@ public final class Rootfs {
                         case "nosuid": flags |= Constants.MS_NOSUID; break;
                         case "noexec": flags |= Constants.MS_NOEXEC; break;
                         case "nodev": flags |= Constants.MS_NODEV; break;
+                        case "noatime": flags |= Constants.MS_NOATIME; break;
+                        case "relatime": flags |= Constants.MS_RELATIME; break;
+                        case "strictatime": flags |= Constants.MS_STRICTATIME; break;
+                        case "nosymfollow": flags |= Constants.MS_NOSYMFOLLOW; break;
                         case "rec": flags |= Constants.MS_REC; break;
+                        case "shared":      propagation = Constants.MS_SHARED;      break;
+                        case "rshared":     propagation = Constants.MS_SHARED | Constants.MS_REC; break;
+                        case "slave":       propagation = Constants.MS_SLAVE;       break;
+                        case "rslave":      propagation = Constants.MS_SLAVE | Constants.MS_REC; break;
+                        case "private":     propagation = Constants.MS_PRIVATE;     break;
+                        case "rprivate":    propagation = Constants.MS_PRIVATE | Constants.MS_REC; break;
+                        case "unbindable":  propagation = Constants.MS_UNBINDABLE;  break;
+                        case "runbindable": propagation = Constants.MS_UNBINDABLE | Constants.MS_REC; break;
                         default:
                             if (data.length() > 0) data.append(",");
                             data.append(o);
@@ -221,13 +242,32 @@ public final class Rootfs {
                 }
             }
             try { Files.createDirectories(Path.of(target)); } catch (IOException ignored) {}
+
+            // Id-mapped mounts: if uidMappings/gidMappings are present we route the
+            // bind through open_tree + mount_setattr(MOUNT_ATTR_IDMAP) + move_mount.
+            if (m.uidMappings != null && !m.uidMappings.isEmpty() && isBind) {
+                if (IdmapHelper.apply(m, target)) {
+                    Logger.debug("idmap mounted " + m.destination);
+                    continue;
+                }
+                Logger.warn("idmap mount failed for " + m.destination + ", falling back to plain bind");
+            }
+
             int rc = Libc.mount(arena, m.source, target, isBind ? null : type, flags,
                     data.length() > 0 ? data.toString() : null);
             if (rc != 0) {
                 Logger.debug("optional mount " + m.destination + " failed: "
                         + Libc.strerror(Libc.errno()));
-            } else {
-                Logger.debug("mounted " + m.destination + " (type=" + type + ")");
+                continue;
+            }
+            Logger.debug("mounted " + m.destination + " (type=" + type + ")");
+            // Apply per-mount propagation if requested. propagation flag has to be set
+            // alone via a second mount() call.
+            if (propagation != 0) {
+                if (Libc.mount(arena, null, target, null, propagation, null) != 0) {
+                    Logger.debug("propagation set on " + m.destination + " failed: "
+                            + Libc.strerror(Libc.errno()));
+                }
             }
         }
     }
