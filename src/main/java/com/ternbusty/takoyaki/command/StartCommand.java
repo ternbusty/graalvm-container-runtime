@@ -38,7 +38,9 @@ public final class StartCommand implements Callable<Integer> {
         Spec spec = null;
         try {
             spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec.class);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Logger.debug("could not reload spec for hooks: " + e.getMessage());
+        }
 
         try {
             NotifySocket.sendStart("/tmp/takoyaki-" + containerId + ".sock");
@@ -47,6 +49,8 @@ public final class StartCommand implements Callable<Integer> {
             Logger.info("container " + containerId + " started");
 
             // poststart hook runs in the runtime namespace after the user process is started.
+            Logger.debug("poststart: spec=" + (spec != null) + " hooks=" + (spec != null && spec.hooks != null)
+                    + " count=" + (spec != null && spec.hooks != null && spec.hooks.poststart != null ? spec.hooks.poststart.size() : 0));
             if (spec != null && spec.hooks != null) {
                 Hooks.run(spec.hooks.poststart, updated, "poststart");
             }
