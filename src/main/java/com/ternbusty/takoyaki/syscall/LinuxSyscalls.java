@@ -108,4 +108,18 @@ public final class LinuxSyscalls implements Syscalls {
         String a = System.getProperty("os.arch", "").toLowerCase();
         return a.contains("aarch64") || a.contains("arm64");
     }
+
+    @Override
+    public int mknod(String path, int mode, long dev) {
+        try (Arena arena = Arena.ofConfined()) {
+            return Libc.mknod(arena, path, mode, dev);
+        }
+    }
+
+    @Override
+    public int access(String path, int mode) {
+        try (Arena arena = Arena.ofConfined()) {
+            return PosixIO.access(arena, path, mode);
+        }
+    }
 }

@@ -27,6 +27,8 @@ public final class RecordingSyscalls implements Syscalls {
     public record PrlimitCall(int pid, int resource, long soft, long hard) {}
     public record IfUpCall(String ifaceName) {}
     public record KeyctlJoinCall(String name) {}
+    public record MknodCall(String path, int mode, long dev) {}
+    public record AccessCall(String path, int mode) {}
 
     private final List<MountCall>       mountCalls       = new ArrayList<>();
     private final List<Umount2Call>     umount2Calls     = new ArrayList<>();
@@ -35,6 +37,8 @@ public final class RecordingSyscalls implements Syscalls {
     private final List<PrlimitCall>     prlimitCalls     = new ArrayList<>();
     private final List<IfUpCall>        ifUpCalls        = new ArrayList<>();
     private final List<KeyctlJoinCall>  keyctlJoinCalls  = new ArrayList<>();
+    private final List<MknodCall>       mknodCalls       = new ArrayList<>();
+    private final List<AccessCall>      accessCalls      = new ArrayList<>();
 
     // ---- stub knobs ---------------------------------------------------------
 
@@ -45,6 +49,8 @@ public final class RecordingSyscalls implements Syscalls {
     private IntSupplier prlimitReturn    = () -> 0;
     private IntSupplier ifUpReturn       = () -> 0;
     private long        keyctlJoinReturn = 1L;
+    private IntSupplier mknodReturn      = () -> 0;
+    private IntSupplier accessReturn     = () -> 0;
     private int         errno            = 0;
 
     // ---- Syscalls impl ------------------------------------------------------
@@ -101,6 +107,18 @@ public final class RecordingSyscalls implements Syscalls {
         return keyctlJoinReturn;
     }
 
+    @Override
+    public int mknod(String path, int mode, long dev) {
+        mknodCalls.add(new MknodCall(path, mode, dev));
+        return mknodReturn.getAsInt();
+    }
+
+    @Override
+    public int access(String path, int mode) {
+        accessCalls.add(new AccessCall(path, mode));
+        return accessReturn.getAsInt();
+    }
+
     // ---- inspection (called from tests) ------------------------------------
 
     public List<MountCall>      mountCalls()      { return mountCalls; }
@@ -110,6 +128,8 @@ public final class RecordingSyscalls implements Syscalls {
     public List<PrlimitCall>    prlimitCalls()    { return prlimitCalls; }
     public List<IfUpCall>       ifUpCalls()       { return ifUpCalls; }
     public List<KeyctlJoinCall> keyctlJoinCalls() { return keyctlJoinCalls; }
+    public List<MknodCall>      mknodCalls()      { return mknodCalls; }
+    public List<AccessCall>     accessCalls()     { return accessCalls; }
 
     // ---- stub setters (called from tests) ----------------------------------
 
@@ -158,6 +178,21 @@ public final class RecordingSyscalls implements Syscalls {
 
     public RecordingSyscalls stubKeyctlJoinReturn(long rc) {
         this.keyctlJoinReturn = rc;
+        return this;
+    }
+
+    public RecordingSyscalls stubMknodReturn(int rc) {
+        this.mknodReturn = () -> rc;
+        return this;
+    }
+
+    public RecordingSyscalls stubMknodReturn(IntSupplier seq) {
+        this.mknodReturn = seq;
+        return this;
+    }
+
+    public RecordingSyscalls stubAccessReturn(int rc) {
+        this.accessReturn = () -> rc;
         return this;
     }
 

@@ -254,8 +254,19 @@ public final class Rootfs {
         }
     }
 
-    private static void applyOciMounts(Arena arena, String rootfsPath, List<Spec.Mount> mounts,
-                                       java.util.Map<String, Integer> idmapFds) {
+    /**
+     * Apply spec.mounts in order. Package-visible so the unit test can drive
+     * this directly against a RecordingSyscalls fake — the previous private
+     * signature meant this loop was only reachable via the full Rootfs.prepare
+     * path which can't be unit-tested.
+     *
+     * The Arena parameter is retained for source compatibility with the old
+     * call site but is no longer used; Syscalls implementations manage their
+     * own Arenas internally.
+     */
+    static void applyOciMounts(Arena arena, String rootfsPath, List<Spec.Mount> mounts,
+                               java.util.Map<String, Integer> idmapFds) {
+        Syscalls sc = SyscallHost.current();
         for (Spec.Mount m : mounts) {
             if (m.destination == null) continue;
             // skip already-handled paths
@@ -294,10 +305,10 @@ public final class Rootfs {
                 Logger.warn("idmap mount failed for " + m.destination + ", falling back to plain bind");
             }
 
-            int rc = Libc.mount(arena, m.source, target, isBind ? null : type, flags, data);
+            int rc = sc.mount(m.source, target, isBind ? null : type, flags, data);
             if (rc != 0) {
                 Logger.debug("optional mount " + m.destination + " failed: "
-                        + Libc.strerror(Libc.errno()));
+                        + sc.strerror(sc.errno()));
                 continue;
             }
             Logger.debug("mounted " + m.destination + " (type=" + type + ")");
@@ -312,17 +323,17 @@ public final class Rootfs {
                                   | Constants.MS_NODEV | Constants.MS_NOEXEC
                                   | Constants.MS_NOATIME | Constants.MS_RELATIME
                                   | Constants.MS_STRICTATIME | Constants.MS_NOSYMFOLLOW));
-                if (Libc.mount(arena, null, target, null, remountFlags, null) != 0) {
+                if (sc.mount(null, target, null, remountFlags, null) != 0) {
                     Logger.debug("bind remount with access flags on " + m.destination
-                            + " failed: " + Libc.strerror(Libc.errno()));
+                            + " failed: " + sc.strerror(sc.errno()));
                 }
             }
             // Apply per-mount propagation if requested. propagation flag has to be set
             // alone via a second mount() call.
             if (propagation != 0) {
-                if (Libc.mount(arena, null, target, null, propagation, null) != 0) {
+                if (sc.mount(null, target, null, propagation, null) != 0) {
                     Logger.debug("propagation set on " + m.destination + " failed: "
-                            + Libc.strerror(Libc.errno()));
+                            + sc.strerror(sc.errno()));
                 }
             }
         }

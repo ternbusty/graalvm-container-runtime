@@ -75,4 +75,19 @@ public interface Syscalls {
      * serial on success, -1 on failure.
      */
     long keyctlJoinSessionKeyring(String name);
+
+    // ---- file system primitives --------------------------------------------
+
+    /**
+     * mknod(path, mode, dev). {@code mode} carries both the type bits
+     * (S_IFCHR / S_IFBLK / S_IFIFO) and the permission bits. Returns 0 on
+     * success, -1 on failure (EPERM in user namespaces is the common one).
+     */
+    int mknod(String path, int mode, long dev);
+
+    /**
+     * access(path, mode). Used to probe device-node presence on the host
+     * before falling back to a bind mount. Returns 0 if accessible.
+     */
+    int access(String path, int mode);
 }
