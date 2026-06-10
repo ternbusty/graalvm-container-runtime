@@ -5,3 +5,6 @@ build/
 .vscode/
 .DS_Store
 .claude/
+
+# Local-only architecture / design notes, intentionally not shared.
+ARCHITECTURE.md
