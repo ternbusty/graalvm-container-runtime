@@ -61,7 +61,33 @@ tasks.named<Test>("test") {
         "-XX:+EnableDynamicAgentLoading",
         "-Xshare:off",
     )
+    // Contest tests live under com.ternbusty.takoyaki.contest and drive the
+    // real takoyaki binary (needs TAKOYAKI_BIN set and Linux). They run via
+    // the separate `contestTest` task — not as part of normal `./gradlew test`.
+    exclude("com/ternbusty/takoyaki/contest/**")
     finalizedBy("jacocoTestReport")
+}
+
+// Integration tests modelled on youki's tests/contest. Each subpackage covers
+// one OCI feature (cgroups, hooks, kill, lifecycle, ...). They invoke the
+// already-built takoyaki binary against test bundles laid down under @TempDir.
+// Skip locally if TAKOYAKI_BIN isn't set; CI sets it after the native build.
+val contestTest by tasks.registering(Test::class) {
+    description = "Run contest-style integration tests against the real takoyaki binary."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    jvmArgs(
+        "--enable-preview",
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading",
+        "-Xshare:off",
+    )
+    // Only the contest package.
+    include("com/ternbusty/takoyaki/contest/**")
+    // Propagate the binary path to the test JVM so the harness can find it.
+    System.getenv("TAKOYAKI_BIN")?.let { environment("TAKOYAKI_BIN", it) }
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {

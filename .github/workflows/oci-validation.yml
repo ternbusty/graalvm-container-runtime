@@ -50,6 +50,23 @@ jobs:
           name: unit-test-report
           path: build/reports/tests/test/
 
+      - name: Run contest integration tests
+        # Drives the freshly-built native binary end-to-end against bundles
+        # laid down in tempdirs. Modelled on youki's tests/contest. sudo
+        # because most specs unshare PID/MNT/IPC/UTS/NET which need
+        # CAP_SYS_ADMIN. -E preserves PATH/JAVA_HOME so gradle still works.
+        run: |
+          sudo -E env "PATH=$PATH" "JAVA_HOME=$JAVA_HOME" \
+            "TAKOYAKI_BIN=/opt/takoyaki/bin" \
+            ./gradlew contestTest --no-daemon
+
+      - name: Upload contest test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contest-test-report
+          path: build/reports/tests/contestTest/
+
       - name: Clone and build runtime-tools validation suite
         run: |
           cd $HOME
