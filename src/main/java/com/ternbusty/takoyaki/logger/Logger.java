@@ -55,7 +55,8 @@ public final class Logger {
         out.flush();
     }
 
-    private static String escape(String s) {
+    /** JSON-escape a log message. Package-visible for unit tests. */
+    static String escape(String s) {
         StringBuilder sb = new StringBuilder(s.length() + 16);
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

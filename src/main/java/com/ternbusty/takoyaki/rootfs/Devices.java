@@ -84,8 +84,8 @@ public final class Devices {
         }
     }
 
-    /** Encode (major, minor) into a Linux dev_t (glibc convention). */
-    private static long makedev(long major, long minor) {
+    /** Encode (major, minor) into a Linux dev_t (glibc convention). Package-visible for tests. */
+    static long makedev(long major, long minor) {
         return ((major & 0xfffff000L) << 32)
              | ((major & 0x00000fffL) << 8)
              | ((minor & 0xffffff00L) << 12)
