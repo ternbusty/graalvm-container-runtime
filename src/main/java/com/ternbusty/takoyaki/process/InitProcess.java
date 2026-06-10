@@ -75,11 +75,9 @@ public final class InitProcess {
                 Logger.debug("PR_SET_CHILD_SUBREAPER failed: " + Libc.strerror(Libc.errno()));
             }
 
-            // Apply linux.timeOffsets — must be done in the new time namespace
-            // before any further forks (we're still single-threaded here).
-            if (spec.linux != null && spec.hasNamespace("time")) {
-                TimeNs.applyOffsets(spec.linux.timeOffsets);
-            }
+            // timens offsets are applied in bootstrap.c stage-1 (before execve into
+            // the Java init), because /proc/self/timens_offsets is no longer writable
+            // after exec or after gettimeofday is called. The Java init cannot do it.
 
             if (spec.hasNamespace("mount")) {
                 Rootfs.prepare(rootfsPath, spec);

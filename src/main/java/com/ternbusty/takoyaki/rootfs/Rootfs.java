@@ -261,6 +261,22 @@ public final class Rootfs {
                 continue;
             }
             Logger.debug("mounted " + m.destination + " (type=" + type + ")");
+            // bind mounts ignore MS_RDONLY (and other access flags) on the initial
+            // mount; the kernel just bind-attaches the source as-is. A second
+            // MS_BIND|MS_REMOUNT with the desired flags is required to actually
+            // enforce read-only / nosuid / nodev / noexec on the bind.
+            if (isBind && (flags & (Constants.MS_RDONLY | Constants.MS_NOSUID
+                    | Constants.MS_NODEV | Constants.MS_NOEXEC)) != 0) {
+                long remountFlags = Constants.MS_BIND | Constants.MS_REMOUNT
+                        | (flags & (Constants.MS_RDONLY | Constants.MS_NOSUID
+                                  | Constants.MS_NODEV | Constants.MS_NOEXEC
+                                  | Constants.MS_NOATIME | Constants.MS_RELATIME
+                                  | Constants.MS_STRICTATIME | Constants.MS_NOSYMFOLLOW));
+                if (Libc.mount(arena, null, target, null, remountFlags, null) != 0) {
+                    Logger.debug("bind remount with access flags on " + m.destination
+                            + " failed: " + Libc.strerror(Libc.errno()));
+                }
+            }
             // Apply per-mount propagation if requested. propagation flag has to be set
             // alone via a second mount() call.
             if (propagation != 0) {

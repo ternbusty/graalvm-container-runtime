@@ -124,6 +124,22 @@ public final class CreateCommand implements Callable<Integer> {
         if (root.debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
         if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         if (noNewKeyring) envList.add("_TAKOYAKI_NO_NEW_KEYRING=1");
+
+        // timens offsets must be written in stage-1 of bootstrap.c BEFORE execve into
+        // Java. The kernel rejects /proc/self/timens_offsets writes after exec, so the
+        // Java side can never do it. Pass the offsets through env vars instead.
+        if (spec.linux != null && spec.linux.timeOffsets != null) {
+            Spec.TimeOffset bt = spec.linux.timeOffsets.get("boottime");
+            if (bt != null) {
+                envList.add("_TAKOYAKI_TIMENS_BOOTTIME_SECS=" + bt.secs);
+                envList.add("_TAKOYAKI_TIMENS_BOOTTIME_NSEC=" + bt.nanosecs);
+            }
+            Spec.TimeOffset mt = spec.linux.timeOffsets.get("monotonic");
+            if (mt != null) {
+                envList.add("_TAKOYAKI_TIMENS_MONOTONIC_SECS=" + mt.secs);
+                envList.add("_TAKOYAKI_TIMENS_MONOTONIC_NSEC=" + mt.nanosecs);
+            }
+        }
         String[] envp = envList.toArray(new String[0]);
         String[] argv = new String[]{exePath, "__init__"};
 

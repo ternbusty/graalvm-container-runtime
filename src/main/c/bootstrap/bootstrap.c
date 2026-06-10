@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -246,6 +247,41 @@ void takoyaki_bootstrap(void) {
         if (unshare(CLONE_NEWTIME) < 0) {
             fprintf(stderr, "[stage-1] unshare(CLONE_NEWTIME) failed: %s\n", strerror(errno));
             exit(1);
+        }
+        /* /proc/self/timens_offsets is writable ONLY while the writer task has not
+         * exec'd in the new time namespace. Bootstrap stage-1 has not yet exec'd
+         * after the unshare, so it's allowed here. The Java init cannot do this
+         * itself because by then it has already exec'd into a new binary, and
+         * gettimeofday calls during JVM startup would lock the offsets anyway.
+         * Values come through env vars set by CreateCommand. */
+        char *bt_s = getenv("_TAKOYAKI_TIMENS_BOOTTIME_SECS");
+        char *bt_n = getenv("_TAKOYAKI_TIMENS_BOOTTIME_NSEC");
+        char *mt_s = getenv("_TAKOYAKI_TIMENS_MONOTONIC_SECS");
+        char *mt_n = getenv("_TAKOYAKI_TIMENS_MONOTONIC_NSEC");
+        if (bt_s || mt_s) {
+            char buf[256];
+            int len = 0;
+            if (bt_s) {
+                len += snprintf(buf + len, sizeof(buf) - len, "boottime %s %s\n",
+                                bt_s, bt_n ? bt_n : "0");
+            }
+            if (mt_s) {
+                len += snprintf(buf + len, sizeof(buf) - len, "monotonic %s %s\n",
+                                mt_s, mt_n ? mt_n : "0");
+            }
+            int fd = open("/proc/self/timens_offsets", O_WRONLY);
+            if (fd < 0) {
+                fprintf(stderr, "[stage-1] open timens_offsets failed: %s\n",
+                        strerror(errno));
+            } else {
+                if (write(fd, buf, len) != len) {
+                    fprintf(stderr, "[stage-1] write timens_offsets failed: %s\n",
+                            strerror(errno));
+                } else {
+                    DBG("[stage-1] timens_offsets applied: %.*s", len, buf);
+                }
+                close(fd);
+            }
         }
     }
     if (clone_flags & CLONE_NEWPID) {
