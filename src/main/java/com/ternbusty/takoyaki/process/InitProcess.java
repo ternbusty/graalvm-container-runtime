@@ -30,6 +30,35 @@ import java.nio.file.Path;
 public final class InitProcess {
     private InitProcess() {}
 
+    /**
+     * Parse the {@code _TAKOYAKI_IDMAP_FDS} env value into a destination-path
+     * -> fd map.
+     *
+     * Wire format: {@code base64(destPath1):fd1,base64(destPath2):fd2,...}
+     * Base64 because destination paths can contain '=' or ',' which are the
+     * separators. Malformed entries (missing colon, bogus base64) are silently
+     * skipped — the init must still come up.
+     *
+     * Package-visible for unit tests.
+     */
+    static java.util.Map<String, Integer> parseIdmapFds(String env) {
+        java.util.Map<String, Integer> out = new java.util.LinkedHashMap<>();
+        if (env == null || env.isEmpty()) return out;
+        for (String entry : env.split(",")) {
+            int colon = entry.indexOf(':');
+            if (colon < 0) continue;
+            try {
+                String dest = new String(java.util.Base64.getDecoder()
+                        .decode(entry.substring(0, colon)));
+                int fd = Integer.parseInt(entry.substring(colon + 1));
+                out.put(dest, fd);
+            } catch (IllegalArgumentException ignored) {
+                // bad base64 or non-numeric fd; skip
+            }
+        }
+        return out;
+    }
+
     public static void run() {
         Logger.setContext("init");
         Logger.debug("init started, pid=" + Libc.getpid() + " ppid=" + Libc.getppid());
@@ -96,18 +125,10 @@ public final class InitProcess {
             // Keys are base64-encoded destination paths; values are fd numbers
             // referring to /proc/<helper>/ns/user opened in the host pid/user ns,
             // inherited across fork+execve.
-            java.util.Map<String, Integer> idmapFds = new java.util.HashMap<>();
-            String idmapEnv = System.getenv("_TAKOYAKI_IDMAP_FDS");
-            if (idmapEnv != null && !idmapEnv.isEmpty()) {
-                for (String entry : idmapEnv.split(",")) {
-                    int colon = entry.indexOf(':');
-                    if (colon < 0) continue;
-                    String dest = new String(java.util.Base64.getDecoder()
-                            .decode(entry.substring(0, colon)));
-                    int fd = Integer.parseInt(entry.substring(colon + 1));
-                    idmapFds.put(dest, fd);
-                    Logger.debug("idmap fd inherited: " + dest + " -> " + fd);
-                }
+            java.util.Map<String, Integer> idmapFds =
+                    parseIdmapFds(System.getenv("_TAKOYAKI_IDMAP_FDS"));
+            for (var e : idmapFds.entrySet()) {
+                Logger.debug("idmap fd inherited: " + e.getKey() + " -> " + e.getValue());
             }
 
             if (spec.hasNamespace("mount")) {

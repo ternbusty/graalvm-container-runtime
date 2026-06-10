@@ -130,7 +130,15 @@ public final class MainProcess {
         }
     }
 
-    private static String buildIdMapping(List<Spec.IdMapping> mappings) {
+    /**
+     * Render a uid_map / gid_map file body from OCI id-mapping entries.
+     *
+     * Package-visible so unit tests can pin the wire format: each line is
+     * "{@code containerID hostID size\n}" with no header, no trailing blank.
+     * When {@code mappings} is null/empty we fall back to identity-mapping
+     * the caller's effective uid (handy for rootless quick boot).
+     */
+    static String buildIdMapping(List<Spec.IdMapping> mappings) {
         if (mappings == null || mappings.isEmpty()) {
             long euid = uidFromProc();
             return "0 " + euid + " 1\n";
@@ -144,7 +152,15 @@ public final class MainProcess {
         return sb.toString();
     }
 
-    private static boolean multiRange(List<Spec.IdMapping> m) {
+    /**
+     * True if the mapping list has more than one entry OR a single entry with
+     * size > 1. That's the trigger for routing through newuidmap/newgidmap
+     * (the kernel only allows a single 1-row identity map via direct write
+     * unless we have CAP_SETUID/CAP_SETGID on the host).
+     *
+     * Package-visible for tests.
+     */
+    static boolean multiRange(List<Spec.IdMapping> m) {
         return m != null && m.size() > 0 && (m.size() > 1 || m.get(0).size > 1);
     }
 
