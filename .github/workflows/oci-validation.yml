@@ -78,18 +78,31 @@ jobs:
           cd $HOME/runtime-tools
           RUNTIME=/opt/takoyaki/bin
           mkdir -p $HOME/validation-out
-          PASS=0; FAIL=0; ERROR=0; TIMEOUT=0; SKIP_V1=0
-          declare -a FAIL_NAMES TIMEOUT_NAMES SKIP_V1_NAMES
+          PASS=0; FAIL=0; ERROR=0; TIMEOUT=0; SKIP_V1=0; SKIP_BROKEN=0
+          declare -a FAIL_NAMES TIMEOUT_NAMES SKIP_V1_NAMES SKIP_BROKEN_NAMES
           # Cgroup v1 tests are skipped on cgroup-v2 only hosts because they probe
           # v1 hierarchies (net_cls, blkio, hugetlb) that the kernel does not
           # expose. Ubuntu 22.04+ is cgroup-v2 only.
-          SKIP_PATTERN='^(linux_cgroups_(network|blkio|hugetlb|devices|pids|relative_(blkio|network|hugetlb|devices|pids))|linux_cgroups_relative_cpus|linux_cgroups_relative_memory|linux_cgroups_cpus|linux_cgroups_memory|delete_(only_create_)?resources)$'
+          SKIP_V1_PATTERN='^(linux_cgroups_(network|blkio|hugetlb|devices|pids|relative_(blkio|network|hugetlb|devices|pids))|linux_cgroups_relative_cpus|linux_cgroups_relative_memory|linux_cgroups_cpus|linux_cgroups_memory|delete_(only_create_)?resources)$'
+          # Known-broken upstream tests in runtime-tools itself. pidfile.t's
+          # PreDelete calls Kill on a container that has already exited (its
+          # process is `true`), then propagates the Kill error as the test
+          # result. The OCI spec REQUIRES Kill on a stopped container to error,
+          # so any spec-compliant runtime fails this test by construction. See
+          # https://github.com/opencontainers/runtime-tools/issues/805.
+          SKIP_BROKEN_PATTERN='^pidfile$'
           for t in validation/*/*.t; do
             name=$(basename "$t" .t)
-            if echo "$name" | grep -qE "$SKIP_PATTERN"; then
+            if echo "$name" | grep -qE "$SKIP_V1_PATTERN"; then
               SKIP_V1=$((SKIP_V1+1))
               SKIP_V1_NAMES+=("$name")
               echo "SKIP(v1) $name"
+              continue
+            fi
+            if echo "$name" | grep -qE "$SKIP_BROKEN_PATTERN"; then
+              SKIP_BROKEN=$((SKIP_BROKEN+1))
+              SKIP_BROKEN_NAMES+=("$name")
+              echo "SKIP(broken-upstream) $name"
               continue
             fi
             out=$HOME/validation-out/$name.log
@@ -122,7 +135,7 @@ jobs:
             fi
           done
           echo "=== SUMMARY ==="
-          echo "PASS=$PASS  FAIL=$FAIL  TIMEOUT=$TIMEOUT  ERROR=$ERROR  SKIP_V1=$SKIP_V1"
+          echo "PASS=$PASS  FAIL=$FAIL  TIMEOUT=$TIMEOUT  ERROR=$ERROR  SKIP_V1=$SKIP_V1  SKIP_BROKEN=$SKIP_BROKEN"
           {
             echo "## OCI runtime-tools validation"
             echo
@@ -133,6 +146,7 @@ jobs:
             echo "| timeout | $TIMEOUT |"
             echo "| error | $ERROR |"
             echo "| skip (cgroup v1) | $SKIP_V1 |"
+            echo "| skip (broken upstream) | $SKIP_BROKEN |"
             echo
             if [ ${#FAIL_NAMES[@]} -gt 0 ]; then
               echo "### Failing tests"
@@ -140,7 +154,24 @@ jobs:
                 echo "- $n"
               done
             fi
+            if [ ${#TIMEOUT_NAMES[@]} -gt 0 ]; then
+              echo "### Timeouts"
+              for n in "${TIMEOUT_NAMES[@]}"; do
+                echo "- $n"
+              done
+            fi
+            if [ ${#SKIP_BROKEN_NAMES[@]} -gt 0 ]; then
+              echo "### Skipped (known-broken upstream tests)"
+              for n in "${SKIP_BROKEN_NAMES[@]}"; do
+                echo "- $n"
+              done
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+          # Fail the job if any non-skipped test failed, timed out, or errored.
+          if [ "$FAIL" -gt 0 ] || [ "$TIMEOUT" -gt 0 ] || [ "$ERROR" -gt 0 ]; then
+            echo "::error::validation failed: FAIL=$FAIL TIMEOUT=$TIMEOUT ERROR=$ERROR"
+            exit 1
+          fi
 
       - name: Upload per-test logs
         if: always()
