@@ -2,6 +2,7 @@ import org.gradle.api.tasks.Exec
 
 plugins {
     application
+    jacoco
     id("org.graalvm.buildtools.native") version "0.11.1"
 }
 
@@ -28,6 +29,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core:5.20.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.20.0")
 }
 
 application {
@@ -50,7 +53,23 @@ tasks.named<JavaExec>("run") {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
-    jvmArgs("--enable-preview", "--enable-native-access=ALL-UNNAMED")
+    // -Xshare:off keeps Mockito's bytecode manipulation happy on recent JDKs;
+    // ByteBuddyAgent attach needs to be unconditionally allowed in tests.
+    jvmArgs(
+        "--enable-preview",
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading",
+        "-Xshare:off",
+    )
+    finalizedBy("jacocoTestReport")
+}
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn("test")
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
 
 val bootstrapDir = layout.projectDirectory.dir("src/main/c/bootstrap")
