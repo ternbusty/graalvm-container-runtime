@@ -18,6 +18,11 @@ public final class Rootfs {
     private static final String[] DEVICES = {"null", "zero", "random", "urandom", "tty", "full"};
 
     public static void prepare(String rootfsPath, Spec spec) {
+        prepare(rootfsPath, spec, java.util.Collections.emptyMap());
+    }
+
+    public static void prepare(String rootfsPath, Spec spec,
+                               java.util.Map<String, Integer> idmapFds) {
         try (Arena arena = Arena.ofConfined()) {
             if (PosixIO.access(arena, rootfsPath, Constants.F_OK) != 0) {
                 throw new RuntimeException("rootfs not found: " + rootfsPath);
@@ -58,7 +63,7 @@ public final class Rootfs {
             mountSys(arena, rootfsPath, spec);
 
             if (spec.mounts != null) {
-                applyOciMounts(arena, rootfsPath, spec.mounts);
+                applyOciMounts(arena, rootfsPath, spec.mounts, idmapFds);
             }
         }
     }
@@ -199,7 +204,8 @@ public final class Rootfs {
         }
     }
 
-    private static void applyOciMounts(Arena arena, String rootfsPath, List<Spec.Mount> mounts) {
+    private static void applyOciMounts(Arena arena, String rootfsPath, List<Spec.Mount> mounts,
+                                       java.util.Map<String, Integer> idmapFds) {
         for (Spec.Mount m : mounts) {
             if (m.destination == null) continue;
             // skip already-handled paths
@@ -245,11 +251,23 @@ public final class Rootfs {
 
             // Id-mapped mounts: if uidMappings/gidMappings are present we route the
             // bind through open_tree + mount_setattr(MOUNT_ATTR_IDMAP) + move_mount.
+            // Prefer the host-prepared fd that CreateCommand stashed in idmapFds —
+            // the in-init fork+unshare path doesn't work inside the container's
+            // pid namespace because /proc shows host pids but our forked helper is
+            // addressed via container-local pids.
             if (m.uidMappings != null && !m.uidMappings.isEmpty() && isBind) {
-                if (IdmapHelper.apply(m, target)) {
-                    Logger.debug("idmap mounted " + m.destination);
-                    continue;
+                Integer prepFd = idmapFds.get(m.destination);
+                boolean done;
+                if (prepFd != null) {
+                    done = IdmapHelper.applyWithFd(m, prepFd, target);
+                    if (done) Logger.debug("idmap mounted " + m.destination
+                            + " using host-prepared fd " + prepFd);
+                } else {
+                    done = IdmapHelper.apply(m, target);
+                    if (done) Logger.debug("idmap mounted " + m.destination
+                            + " using in-init helper");
                 }
+                if (done) continue;
                 Logger.warn("idmap mount failed for " + m.destination + ", falling back to plain bind");
             }
 

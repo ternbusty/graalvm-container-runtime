@@ -168,29 +168,31 @@ sed 's/^/    /' $WORK/hook-bundle/rootfs/tmp/prop.txt 2>&1 || echo "    (missing
 cleanup pr pr
 
 echo
-echo "===== H. mount idmap (kernel 5.12+) ====="
+echo "===== H. mount idmap (kernel 5.12+, host-prepared userns_fd) ====="
 uname -r
-sudo chmod o+x /home/ubuntu /home/ubuntu/work /home/ubuntu/work/hook-bundle 2>/dev/null || true
-sudo chmod o+r $WORK/hook-bundle/config.json 2>/dev/null || true
-mkdir -p $WORK/hook-bundle/rootfs/idmap
-cat > $WORK/hook-bundle/config.json <<EOF
+# IMPORTANT: this test deliberately does NOT use an enclosing user namespace.
+# An idmap mount with a separate per-mount uidMappings is independently useful
+# (and easier to set up with bundle ownership) and that's what this verifies.
+prepare_busybox_rootfs $WORK/idmap-bundle
+echo testhost > /tmp/idmap-source.txt
+chown 100000:100000 /tmp/idmap-source.txt
+cat > $WORK/idmap-bundle/config.json <<EOF
 { "ociVersion":"1.0.0","root":{"path":"rootfs"},
-  "process":{"args":["/bin/sh","-c","ls -ln /idmap > /tmp/idm.txt 2>&1; sleep 0"],
+  "process":{"args":["/bin/sh","-c","ls -ln /idmap/idmap-source.txt > /tmp/idm.txt 2>&1; sleep 0"],
              "env":["PATH=/bin"],"cwd":"/","user":{"uid":0,"gid":0}},
-  "hostname":"i","linux":{"namespaces":[{"type":"user"},{"type":"pid"},{"type":"mount"},{"type":"uts"},{"type":"ipc"}],
-                          "uidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
-                          "gidMappings":[{"containerID":0,"hostID":100000,"size":65536}],
+  "hostname":"i","linux":{"namespaces":[{"type":"pid"},{"type":"mount"},{"type":"uts"},{"type":"ipc"}],
                           "cgroupsPath":"/takoyaki-id"},
   "mounts":[{"destination":"/idmap","source":"/tmp","type":"none","options":["bind","rw"],
              "uidMappings":[{"containerID":0,"hostID":100000,"size":1}],
              "gidMappings":[{"containerID":0,"hostID":100000,"size":1}]}] }
 EOF
 cleanup id id
-run_init_log id /tmp/H.log $WORK/hook-bundle
+mkdir -p $WORK/idmap-bundle/rootfs/idmap
+run_init_log id /tmp/H.log $WORK/idmap-bundle
 sleep 1
-echo "  /idmap (first 3 entries):"
-sed -n '1,3p' $WORK/hook-bundle/rootfs/tmp/idm.txt 2>&1 | sed 's/^/    /'
-grep -iE "idmap|open_tree|mount_setattr" /tmp/H.log | head -3 | sed 's/^/  log: /'
+echo "  ls -ln /idmap/idmap-source.txt inside container:"
+sed 's/^/    /' $WORK/idmap-bundle/rootfs/tmp/idm.txt 2>&1 || echo "    (missing)"
+grep -iE "host-prepared|uid_map|fd inherited" /tmp/H.log | head -3 | sed 's/^/  log: /'
 cleanup id id
 
 echo

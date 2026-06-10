@@ -125,6 +125,32 @@ public final class CreateCommand implements Callable<Integer> {
         if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         if (noNewKeyring) envList.add("_TAKOYAKI_NO_NEW_KEYRING=1");
 
+        // Mount idmap: set up helper user namespaces on the HOST (where we can use
+        // host pids to address /proc), keep the userns_fd open, pass it to the init
+        // via env var (fd inherits across fork+execve because we don't set CLOEXEC).
+        // Doing this from the host side avoids the /proc<->container-pid mismatch
+        // that prevents the init (which runs inside the container's pid namespace)
+        // from addressing its forked helpers via host-mounted /proc.
+        if (spec.mounts != null) {
+            StringBuilder fdMap = new StringBuilder();
+            for (Spec.Mount m : spec.mounts) {
+                if (m.uidMappings == null || m.uidMappings.isEmpty()) continue;
+                int fd = com.ternbusty.takoyaki.rootfs.IdmapHelper.setupHostSide(
+                        m.uidMappings, m.gidMappings);
+                if (fd < 0) {
+                    Logger.warn("idmap helper setup failed for " + m.destination
+                            + "; mount will fall back to plain bind");
+                    continue;
+                }
+                if (fdMap.length() > 0) fdMap.append(',');
+                fdMap.append(java.util.Base64.getEncoder().encodeToString(
+                        m.destination.getBytes())).append(':').append(fd);
+            }
+            if (fdMap.length() > 0) {
+                envList.add("_TAKOYAKI_IDMAP_FDS=" + fdMap.toString());
+            }
+        }
+
         // timens offsets must be written in stage-1 of bootstrap.c BEFORE execve into
         // Java. The kernel rejects /proc/self/timens_offsets writes after exec, so the
         // Java side can never do it. Pass the offsets through env vars instead.

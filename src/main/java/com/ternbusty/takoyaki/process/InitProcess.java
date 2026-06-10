@@ -79,8 +79,26 @@ public final class InitProcess {
             // the Java init), because /proc/self/timens_offsets is no longer writable
             // after exec or after gettimeofday is called. The Java init cannot do it.
 
+            // Parse pre-prepared idmap helper fds passed via env from CreateCommand.
+            // Keys are base64-encoded destination paths; values are fd numbers
+            // referring to /proc/<helper>/ns/user opened in the host pid/user ns,
+            // inherited across fork+execve.
+            java.util.Map<String, Integer> idmapFds = new java.util.HashMap<>();
+            String idmapEnv = System.getenv("_TAKOYAKI_IDMAP_FDS");
+            if (idmapEnv != null && !idmapEnv.isEmpty()) {
+                for (String entry : idmapEnv.split(",")) {
+                    int colon = entry.indexOf(':');
+                    if (colon < 0) continue;
+                    String dest = new String(java.util.Base64.getDecoder()
+                            .decode(entry.substring(0, colon)));
+                    int fd = Integer.parseInt(entry.substring(colon + 1));
+                    idmapFds.put(dest, fd);
+                    Logger.debug("idmap fd inherited: " + dest + " -> " + fd);
+                }
+            }
+
             if (spec.hasNamespace("mount")) {
-                Rootfs.prepare(rootfsPath, spec);
+                Rootfs.prepare(rootfsPath, spec, idmapFds);
                 // Additional devices declared in spec.linux.devices, before pivot_root.
                 if (spec.linux != null && spec.linux.devices != null) {
                     Devices.create(rootfsPath, spec.linux.devices);

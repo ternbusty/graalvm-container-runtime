@@ -18,7 +18,16 @@ import java.util.concurrent.Callable;
  * return its /proc/<helper>/ns/user fd, and apply MOUNT_ATTR_IDMAP to a clone of the
  * source path before move-mounting it to the destination.
  *
- * Mirrors what runc and youki do for per-mount id-mapped mounts.
+ * IMPORTANT: this helper has TWO entry points.
+ *
+ * {@link #setupHostSide} is called from the takoyaki main process BEFORE forking
+ * the bootstrap. It runs on the host (host pid namespace, host /proc) so it can
+ * address its forked helper via host pids. The returned fd survives the fork +
+ * execve and is then handed to the init via env var.
+ *
+ * {@link #apply} is the in-init path used when the setup wasn't done on the host
+ * (it only works for non-userns containers; for userns containers /proc and pids
+ * get out of sync and mount_setattr returns EPERM). Prefer the host-side path.
  */
 public final class IdmapHelper {
     private IdmapHelper() {}
@@ -33,6 +42,28 @@ public final class IdmapHelper {
         } finally {
             PosixIO.close(usernsFd);
         }
+    }
+
+    /**
+     * Apply an idmap bind mount using a pre-prepared userns fd (passed in from the
+     * main process via env). The fd was opened in the host's pid/user namespace,
+     * survives fork+execve, and points to a userns whose uid_map/gid_map were
+     * already written by the host-side main process.
+     */
+    public static boolean applyWithFd(Spec.Mount m, int usernsFd, String destination) {
+        return IdmapMount.apply(m.source, usernsFd, destination);
+    }
+
+    /**
+     * Host-side setup: fork a helper, helper unshares CLONE_NEWUSER, parent (the
+     * main takoyaki process) writes uid_map/gid_map to the helper via host pids,
+     * parent opens /proc/&lt;helper&gt;/ns/user and returns the fd. The helper waits
+     * forever and is implicitly killed when this process exits — we don't kill it
+     * explicitly because the returned fd is what pins the userns alive.
+     */
+    public static int setupHostSide(List<Spec.IdMapping> uidMaps,
+                                    List<Spec.IdMapping> gidMaps) {
+        return openMappedUserNs(uidMaps, gidMaps);
     }
 
     /**
@@ -56,7 +87,27 @@ public final class IdmapHelper {
             }
             if (pid == 0) {
                 PosixIO.close(sync[0]);
-                Libc.unshare(Constants.CLONE_NEWUSER);
+                int rc = Libc.unshare(Constants.CLONE_NEWUSER);
+                int savedErrno = Libc.errno();
+                int childPid = Libc.getpid();
+                // Probe what /proc/self/ns/user looks like AFTER unshare.
+                String childLink = "?", byPidLink = "?";
+                try {
+                    childLink = Files.readSymbolicLink(Path.of("/proc/self/ns/user")).toString();
+                    byPidLink = Files.readSymbolicLink(Path.of("/proc/" + childPid + "/ns/user")).toString();
+                } catch (IOException ignored) {}
+                System.err.println("[idmap-child] pid=" + childPid + " unshare rc=" + rc
+                        + " errno=" + savedErrno
+                        + " self=" + childLink + " byPid=" + byPidLink);
+                if (rc != 0) {
+                    // Signal failure to parent by writing 0 instead of 1, then exit.
+                    try (Arena a2 = Arena.ofConfined()) {
+                        byte[] zero = new byte[]{0};
+                        PosixIO.write(a2, sync[1], zero);
+                    }
+                    PosixIO._exit(1);
+                    return -1;
+                }
                 // Tell parent we're in the new userns, then wait for it to finish.
                 try (Arena a2 = Arena.ofConfined()) {
                     byte[] one = new byte[]{1};
@@ -71,10 +122,35 @@ public final class IdmapHelper {
             try (Arena a2 = Arena.ofConfined()) {
                 byte[] one = new byte[1];
                 PosixIO.read(a2, sync[0], one);
+                if (one[0] != 1) {
+                    Logger.warn("idmap helper unshare(CLONE_NEWUSER) failed; aborting idmap");
+                    PosixIO.close(sync[0]);
+                    return -1;
+                }
             }
+            // Sanity-check: the helper's userns must NOT be our own (the kernel rejects
+            // mount_setattr(IDMAP) with EPERM if userns_fd == init_user_ns).
+            try {
+                String helperLink = Files.readSymbolicLink(Path.of("/proc/" + pid + "/ns/user")).toString();
+                String myLink = Files.readSymbolicLink(Path.of("/proc/self/ns/user")).toString();
+                Logger.debug("idmap parent pid=" + Libc.getpid() + " childPid=" + pid
+                        + " helper=" + helperLink + " ours=" + myLink);
+                if (helperLink.equals(myLink)) {
+                    Logger.warn("idmap helper userns same as ours (" + myLink + "); unshare lied");
+                }
+            } catch (IOException ignored) {}
             // Write maps from the parent's privileged context.
             writeMappings(pid, uidMaps, "uid_map");
             writeMappings(pid, gidMaps, "gid_map");
+            // Verify what actually landed in /proc/<helper>/uid_map.
+            try {
+                String uidMapContent = Files.readString(Path.of("/proc/" + pid + "/uid_map"));
+                String gidMapContent = Files.readString(Path.of("/proc/" + pid + "/gid_map"));
+                Logger.debug("idmap helper uid_map=" + uidMapContent.replace("\n", "|")
+                        + " gid_map=" + gidMapContent.replace("\n", "|"));
+            } catch (IOException e) {
+                Logger.warn("could not read back idmap helper maps: " + e.getMessage());
+            }
             int fd = PosixIO.open(arena, "/proc/" + pid + "/ns/user", Constants.O_RDONLY, 0);
             // Release helper child.
             try (Arena a2 = Arena.ofConfined()) {
@@ -89,12 +165,25 @@ public final class IdmapHelper {
         }
     }
 
+    /**
+     * Write a userns map intended to drive mount_setattr(MOUNT_ATTR_IDMAP).
+     *
+     * The kernel's make_vfsuid() uses map_id_down(uid_map, disk_uid) — i.e. it
+     * looks up the on-disk uid in the INSIDE column and returns the OUTSIDE one
+     * as what userspace sees. So to make "disk uid hostID appear as containerID"
+     * we must write {@code "hostID containerID size"}, INSIDE=hostID first.
+     *
+     * This is the OPPOSITE direction from a regular process-attached userns,
+     * where the same OCI spec entry {containerID=0, hostID=100000, size=1} would
+     * be written as "0 100000 1" (a process running inside the userns sees uid 0
+     * for what is uid 100000 outside).
+     */
     private static void writeMappings(int pid, List<Spec.IdMapping> maps, String file) {
         if (maps == null || maps.isEmpty()) return;
         StringBuilder sb = new StringBuilder();
         for (Spec.IdMapping m : maps) {
-            sb.append(m.containerID).append(' ')
-              .append(m.hostID).append(' ')
+            sb.append(m.hostID).append(' ')
+              .append(m.containerID).append(' ')
               .append(m.size).append('\n');
         }
         try {
