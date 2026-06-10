@@ -1,0 +1,81 @@
+# Changelog
+
+## 0.1.0 (2026-06-10)
+
+
+### 🎉 Features
+
+* add bootstrap C constructor for two-stage namespace setup ([87bbd33](https://github.com/ternbusty/takoyaki/commit/87bbd33015ae68bec66ef9ca2996136f64161042))
+* add capability, rlimit, setgroups, and close_range support ([c34d59d](https://github.com/ternbusty/takoyaki/commit/c34d59dbe855d43c6ded83b4fbc0a1a971ee9c04))
+* add main and init process orchestration ([ae5c977](https://github.com/ternbusty/takoyaki/commit/ae5c9773d071aea656b908bed8611fceb0337589))
+* add oci spec, container state, and runtime config ([7e465c3](https://github.com/ternbusty/takoyaki/commit/7e465c329f99df3da4b3c2778be2bfae9b40120b))
+* add panama ffm wrappers for libc and bootstrap symbol ([5925cef](https://github.com/ternbusty/takoyaki/commit/5925cef225007974e72068ddb41a5b808716543f))
+* add rootfs pivot, cgroup v2 setup, and namespace flag mapping ([63569d7](https://github.com/ternbusty/takoyaki/commit/63569d707b0025f548dbf2d03a6dc7092642d0c7))
+* add runc-compatible cli with create/start/state/kill/delete ([6ab1ebc](https://github.com/ternbusty/takoyaki/commit/6ab1ebc854b20c22aa211ec5eca701f0bbb1a6c8))
+* add seccomp filter via libseccomp ffm bindings ([18b11fb](https://github.com/ternbusty/takoyaki/commit/18b11fbba7512b1c175427c23ddca9b4eb6e7518))
+* add structured logger and jackson json codec ([0a5f3f5](https://github.com/ternbusty/takoyaki/commit/0a5f3f52316696b58a598b7c2a5a8ba19006e9df))
+* add unix socket notify and sync channel ipc ([527199c](https://github.com/ternbusty/takoyaki/commit/527199ccf316cda0fb6e77041b39a4b66eabb17b))
+* **apparmor:** add profile staging via /proc/self/attr/exec ([327d992](https://github.com/ternbusty/takoyaki/commit/327d9921ebe7545dd4972b5403df2a39b471858b))
+* **bootstrap:** use clone3 with pidfd, fall back to clone ([debc84a](https://github.com/ternbusty/takoyaki/commit/debc84af38c1fa5004623fd744230df46c12ab5f))
+* **cgroup:** add applyLimitsOnly entry point for update command ([8f3bf2f](https://github.com/ternbusty/takoyaki/commit/8f3bf2f97bbef8fa7cfb5904f95ab989beccf50c))
+* **cgroup:** emit bpf program for linux.resources.devices and attach ([dd4e17e](https://github.com/ternbusty/takoyaki/commit/dd4e17ec4ac7d309ad4afc63c0c2e73147e9e11b))
+* **cgroup:** write cpuset.cpus and cpuset.mems for cpu controller ([db1dd3f](https://github.com/ternbusty/takoyaki/commit/db1dd3f40145e8ee9aad3b73dbb99b39b56a7c01))
+* **cli:** add events subcommand for resource stats stream ([c4655fa](https://github.com/ternbusty/takoyaki/commit/c4655fa9c29a3de0b736cb74f0b101edfdc026b0))
+* **cli:** add exec subcommand via setns to join existing namespaces ([a9c81c0](https://github.com/ternbusty/takoyaki/commit/a9c81c0213a79b6fae1ce6aace8be87c6da9f9c3))
+* **cli:** add list and ps subcommands ([a248ff6](https://github.com/ternbusty/takoyaki/commit/a248ff6de8bc42494a49bde8b9e8af070e6519fd))
+* **cli:** add pause and resume via cgroup.freeze ([2a64834](https://github.com/ternbusty/takoyaki/commit/2a6483417d2cd7737b687e8b732a2f54674ea68e))
+* **cli:** add update subcommand for runtime resource changes ([714647f](https://github.com/ternbusty/takoyaki/commit/714647f12e477a717d68925b16a4fb74841f6e88))
+* **cli:** register new subcommands on TakoyakiRoot ([0d8e8d5](https://github.com/ternbusty/takoyaki/commit/0d8e8d55f6b8f5fd724fa96532eb56c6d15ef8ed))
+* **console:** allocate pty and ship master fd via console-socket ([c76fdda](https://github.com/ternbusty/takoyaki/commit/c76fdda259effb4f3462dd4d28f57ee3603990c8))
+* **hooks:** add lifecycle hook runner with stdin state pipe ([ea79a23](https://github.com/ternbusty/takoyaki/commit/ea79a239ccb8d8c23f817b4b5edf5a2f4d7e8688))
+* **hooks:** integrate lifecycle hooks in main/start/delete ([a09cb8f](https://github.com/ternbusty/takoyaki/commit/a09cb8f95257c7eaf5eb241d775987687fe9bcd3))
+* **init:** wire new hardening modules and switch to setres*/non-dumpable ([35d8246](https://github.com/ternbusty/takoyaki/commit/35d8246cd172ae251f9bbcafe8707ebbb483951a))
+* **init:** wire selinux, keyring, timens offsets, and reflect-config additions ([2102152](https://github.com/ternbusty/takoyaki/commit/21021528f29c843e13b72ad15dd295bd484fd5d7))
+* **ipc:** add SCM_RIGHTS sendmsg/recvmsg helper for fd passing ([ac31034](https://github.com/ternbusty/takoyaki/commit/ac3103426ae52eee12a8b406188dd886098dcdee))
+* link libseccomp at NEEDED to drop explicit preload ([907e35e](https://github.com/ternbusty/takoyaki/commit/907e35e9b197fb1fbc6070a3e64dc914e8452d31))
+* **namespace:** unshare cgroup and time namespaces in bootstrap ([868b29c](https://github.com/ternbusty/takoyaki/commit/868b29ca0575d3925e877145e4a4db58386b37d1))
+* **network:** add loopback interface up via ioctl ([c7e6080](https://github.com/ternbusty/takoyaki/commit/c7e6080925f6e94ccff94b5982ae56bca04da60a))
+* **oci:** pass more of opencontainers/runtime-tools validation suite ([d9b582c](https://github.com/ternbusty/takoyaki/commit/d9b582c4faad553fb2f657e0c796c1ab3d3522c2))
+* **oci:** pass more validation tests — namespace path, rootfsPropagation, oom, rlimits ([da7807c](https://github.com/ternbusty/takoyaki/commit/da7807cd1e7b5b57d9b9b3c55f7a3088ae6c4f22))
+* **rootfs:** add device creation via mknod with bind fallback ([c09ed80](https://github.com/ternbusty/takoyaki/commit/c09ed8028dceece4d3e8a8fd743cdbe08ca118d4))
+* **rootfs:** add idmap mount primitive (open_tree + mount_setattr + move_mount) ([62c6941](https://github.com/ternbusty/takoyaki/commit/62c69417045596e2610cd7b1eb90801b7f715669))
+* **rootfs:** auto-generate /etc/passwd and /etc/group entries ([74587a3](https://github.com/ternbusty/takoyaki/commit/74587a36b4b672561a4487511734104cd0510330))
+* **rootfs:** default MS_NOSUID on rootfs bind ([89706b5](https://github.com/ternbusty/takoyaki/commit/89706b5e799441aeb6a3c7e6a2b41b81ce61215d))
+* **rootfs:** mask sensitive paths and read-only remount paths ([4897162](https://github.com/ternbusty/takoyaki/commit/4897162315244a108845431d751deb3a2b07cfd3))
+* **rootfs:** wire idmap mount via helper-spawned user namespace ([53ad779](https://github.com/ternbusty/takoyaki/commit/53ad7790c98f4958d9a3fc212a56cf49710441f1))
+* **rootless:** use newuidmap/newgidmap helpers for multi-range maps ([b80af02](https://github.com/ternbusty/takoyaki/commit/b80af0217605591eedc76d039099cf4e64097198))
+* **seccomp:** forward SCMP_ACT_NOTIFY fd to listenerPath via host-prepared socket ([cee91c1](https://github.com/ternbusty/takoyaki/commit/cee91c1f4af14395ed4666ecbf0dcdec57008973))
+* **seccomp:** support arg-conditional rules and report notify fd ([adea061](https://github.com/ternbusty/takoyaki/commit/adea06109c5423ae103fc691753f0a0931e97d66))
+* **security:** join new kernel session keyring per container ([3a9d185](https://github.com/ternbusty/takoyaki/commit/3a9d18597ccb9f947af357d89082c6eb9995a3ba))
+* **selinux:** apply selinuxLabel via /proc/self/attr/exec ([0d25da5](https://github.com/ternbusty/takoyaki/commit/0d25da56eaeb8b620a2805c264b69bd6f52da12e))
+* **spec:** add cpuset/timeOffsets/deviceCgroup/per-mount-propagation fields ([5736072](https://github.com/ternbusty/takoyaki/commit/57360727b7e808850f79a1ee1aff00e11fa88d29))
+* **spec:** add hooks, annotations, sysctl, apparmor fields to oci spec ([72bd492](https://github.com/ternbusty/takoyaki/commit/72bd492d7bbc36c5a026f0972872d106b1d4ba9f))
+* **syscall:** add setresuid/setresgid, mknod, ioctl wrappers ([be8ec32](https://github.com/ternbusty/takoyaki/commit/be8ec321f12048fa142e25e44632200723472f71))
+* **sysctl:** add module to apply oci linux.sysctl to /proc/sys ([e8c248c](https://github.com/ternbusty/takoyaki/commit/e8c248c97d8e08a301bf0a7dafc2eb00a042002f))
+* **time-ns:** apply linux.timeOffsets to /proc/self/timens_offsets ([632de84](https://github.com/ternbusty/takoyaki/commit/632de8486fb7c4a94de3f8f85c011841368874c7))
+
+
+### 🐛 Bug Fixes
+
+* **apparmor:** drop securityfs presence check that always fails post-pivot ([458a967](https://github.com/ternbusty/takoyaki/commit/458a9677aaf772564d0a7d06b6b6f375e8a54548))
+* **apparmor:** try /proc/self/attr/apparmor/exec before legacy attr/exec ([881d242](https://github.com/ternbusty/takoyaki/commit/881d242bd1c5265ad2388077382e973a572bb59a))
+* **devices,ci:** pre-pend OCI default device allows; flatten tarball; skip v1 cgroup tests ([dc11130](https://github.com/ternbusty/takoyaki/commit/dc1113032f70a33bfa7a900ef7ee1a1d235a5793))
+* **idmap:** set up helper userns from main process, swap uid_map direction ([7ed1831](https://github.com/ternbusty/takoyaki/commit/7ed183198ca0db2417efee67f9dabcc8e4e0de85))
+* **native-image:** register seccomp_rule_add_array foreign descriptor ([4cb86e5](https://github.com/ternbusty/takoyaki/commit/4cb86e5fd5b23e819818842da66674db5843183f))
+* preserve MS_NOSUID across readonly remount; resolve bundle to absolute path ([e4253a5](https://github.com/ternbusty/takoyaki/commit/e4253a53fda9d262d572641f8adede07d0181d2e))
+* **timens,bind-ro:** apply timens offsets pre-exec; remount bind for access flags ([33df491](https://github.com/ternbusty/takoyaki/commit/33df49187414f90d272719d3f430bf9a129e3c29))
+
+
+### 🔧 Miscellaneous Chores
+
+* configure native-image ffm downcalls and jackson reflection ([285e381](https://github.com/ternbusty/takoyaki/commit/285e3811702bd0a91752963749ca896b190cb7be))
+* register ffm descriptors for pty, sendmsg, mknod, ioctl ([d84cc55](https://github.com/ternbusty/takoyaki/commit/d84cc5569f846f57d86a4adad00ff6bb3d35de96))
+* scaffold gradle project with wrapper and build caching ([c26a50a](https://github.com/ternbusty/takoyaki/commit/c26a50a60a12c280e143d13f0ba82a7af5b5521d))
+* **start:** surface spec-load errors and add poststart-hook debug log ([04bde1b](https://github.com/ternbusty/takoyaki/commit/04bde1b8ded4368e8518cb6a65cf893f079798f1))
+
+
+### ♻️ Code Refactoring
+
+* rename package from io.github.ternbusty.gcr to com.ternbusty.gcr ([408141a](https://github.com/ternbusty/takoyaki/commit/408141a51a0dbc00e5c595dbeb93124db708689f))
+* rename project to takoyaki ([00c9961](https://github.com/ternbusty/takoyaki/commit/00c9961cc9d545c7b6767704d40de898c2625f57))
+* **test:** adopt youki-style Syscalls trait + RecordingSyscalls fake ([59adf4a](https://github.com/ternbusty/takoyaki/commit/59adf4a75eabd0ecdce7a5e94ba60e2dea274c60))
