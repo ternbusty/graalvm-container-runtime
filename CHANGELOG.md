@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/ternbusty/takoyaki/compare/v0.1.0...v0.1.1) (2026-06-10)
+
+
+### 📝 Documentation
+
+* drop runc reference from README ([36cc481](https://github.com/ternbusty/takoyaki/commit/36cc481ceec9b7713d42afc129b0f4175a2a3ad2))
+
 ## 0.1.0 (2026-06-10)
 
 
