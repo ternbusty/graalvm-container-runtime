@@ -2,6 +2,7 @@ package com.ternbusty.takoyaki.seccomp;
 
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
+import com.ternbusty.takoyaki.syscall.Libc;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
@@ -77,6 +78,16 @@ public final class Seccomp {
     }
 
     public static void apply(Spec.LinuxSeccomp sec) {
+        apply(sec, null, null);
+    }
+
+    /**
+     * @param containerId required only when SCMP_ACT_NOTIFY rules are present and
+     *                    {@code sec.listenerPath} is set; used to build the state
+     *                    JSON sent to the listener.
+     * @param bundle      same as above
+     */
+    public static void apply(Spec.LinuxSeccomp sec, String containerId, String bundle) {
         if (sec == null) return;
         if (!ensureLoaded()) {
             Logger.error("libseccomp.so.2 not found, cannot apply seccomp");
@@ -113,13 +124,28 @@ public final class Seccomp {
                         for (String name : sc.names) {
                             MemorySegment nameSeg = arena.allocateFrom(name);
                             int nr = (int) SECCOMP_SYSCALL_RESOLVE_NAME.invoke(nameSeg);
-                            if (nr < 0) {
-                                Logger.debug("syscall " + name + " not supported, skipping");
+                            if (nr == 0x7fffffff /* __NR_SCMP_ERROR */) {
+                                Logger.debug("syscall " + name + " unknown to libseccomp, skipping");
                                 continue;
                             }
+                            // libseccomp returns negative "pseudo-syscall" numbers
+                            // for syscalls that exist on at least one architecture
+                            // but not on the native one (e.g. mknod on aarch64,
+                            // resolved as a non-native pseudo). Pass them through
+                            // anyway — libseccomp records them in the multi-arch
+                            // rule set, and importantly still sets col->notify_used
+                            // when action == SCMP_ACT_NOTIFY. Skipping would silently
+                            // drop the notify state and seccomp_notify_fd would then
+                            // return -EFAULT.
                             int rc;
                             if (sc.args == null || sc.args.isEmpty()) {
-                                rc = (int) SECCOMP_RULE_ADD.invoke(ctx, action, nr, 0);
+                                // Use seccomp_rule_add_array even with zero args. The
+                                // variadic seccomp_rule_add silently mis-loads the
+                                // notify state under Panama FFM (seccomp_notify_fd
+                                // returns -EFAULT afterwards), while the non-variadic
+                                // array variant works.
+                                rc = (int) SECCOMP_RULE_ADD_ARRAY.invoke(
+                                        ctx, action, nr, 0, MemorySegment.NULL);
                             } else {
                                 rc = addRuleWithArgs(arena, ctx, action, nr, sc.args);
                             }
@@ -147,12 +173,23 @@ public final class Seccomp {
                     }
                 }
                 if (hasNotify) {
+                    Logger.debug("seccomp ctx address=0x"
+                            + Long.toHexString(ctx.address())
+                            + " (about to call seccomp_notify_fd)");
                     int notifyFd = (int) SECCOMP_NOTIFY_FD.invoke(ctx);
                     if (notifyFd < 0) {
                         Logger.warn("seccomp_notify_fd returned " + notifyFd);
+                    } else if (sec.listenerPath == null || sec.listenerPath.isEmpty()) {
+                        Logger.warn("SCMP_ACT_NOTIFY rules present but no listenerPath; "
+                                + "leaving notify fd=" + notifyFd
+                                + " unforwarded — matching syscalls will block forever");
                     } else {
-                        Logger.info("seccomp notify fd=" + notifyFd
-                                + " (forward via SCM_RIGHTS to listenerPath)");
+                        String preFdStr = System.getenv("_TAKOYAKI_SECCOMP_LISTENER_FD");
+                        int preFd = preFdStr != null ? Integer.parseInt(preFdStr) : -1;
+                        SeccompListener.forward(sec.listenerPath, containerId, bundle,
+                                Libc.getpid(), sec.listenerMetadata, notifyFd, preFd);
+                        // Close our copy; the listener has its own dup via SCM_RIGHTS.
+                        com.ternbusty.takoyaki.syscall.PosixIO.close(notifyFd);
                     }
                 }
             } finally {

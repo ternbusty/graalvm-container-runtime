@@ -210,7 +210,8 @@ public final class InitProcess {
             }
 
             if (spec.linux != null && spec.linux.seccomp != null) {
-                Seccomp.apply(spec.linux.seccomp);
+                Seccomp.apply(spec.linux.seccomp,
+                        System.getenv("_TAKOYAKI_CONTAINER_ID"), bundlePath);
             }
 
             // PTY setup: if process.terminal is true and a console socket was passed,

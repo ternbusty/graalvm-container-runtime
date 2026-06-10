@@ -121,6 +121,7 @@ public final class CreateCommand implements Callable<Integer> {
         envList.add("_TAKOYAKI_NOTIFY_LISTENER_FD=" + notifyListenerFd);
         envList.add("_TAKOYAKI_BUNDLE_PATH=" + bundle);
         envList.add("_TAKOYAKI_ROOTFS_PATH=" + rootfsPath);
+        envList.add("_TAKOYAKI_CONTAINER_ID=" + containerId);
         if (root.debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
         if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         if (noNewKeyring) envList.add("_TAKOYAKI_NO_NEW_KEYRING=1");
@@ -148,6 +149,23 @@ public final class CreateCommand implements Callable<Integer> {
             }
             if (fdMap.length() > 0) {
                 envList.add("_TAKOYAKI_IDMAP_FDS=" + fdMap.toString());
+            }
+        }
+
+        // Seccomp notify listener: connect on the host side (where the listener
+        // socket path actually resolves) and pass the connected fd to the init via
+        // env. After the init pivots into the container rootfs the listener path is
+        // no longer reachable, so this has to happen here.
+        if (spec.linux != null && spec.linux.seccomp != null
+                && spec.linux.seccomp.listenerPath != null
+                && !spec.linux.seccomp.listenerPath.isEmpty()) {
+            int fd = com.ternbusty.takoyaki.seccomp.SeccompListener.connectHostSide(
+                    spec.linux.seccomp.listenerPath);
+            if (fd >= 0) {
+                envList.add("_TAKOYAKI_SECCOMP_LISTENER_FD=" + fd);
+            } else {
+                Logger.warn("could not connect to seccomp listener " + spec.linux.seccomp.listenerPath
+                        + " from host; SCMP_ACT_NOTIFY rules will block forever");
             }
         }
 

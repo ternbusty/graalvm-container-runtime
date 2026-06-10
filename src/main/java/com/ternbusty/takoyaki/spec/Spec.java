@@ -171,6 +171,8 @@ public final class Spec {
         public List<String> architectures;
         public List<LinuxSyscall> syscalls;
         public List<String> flags;
+        public String listenerPath;
+        public String listenerMetadata;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
