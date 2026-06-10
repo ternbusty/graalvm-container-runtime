@@ -55,17 +55,21 @@ jobs:
             sudo apt-get install -y busybox-static
             BUSYBOX=$(which busybox)
           fi
+          # runtime-tools' GetDefaultGenerator sets root.path=".", so the tarball
+          # must extract directly into the bundle dir (NOT under a rootfs/ subdir),
+          # otherwise /bin/sh ends up at <bundle>/rootfs/bin/sh and the container
+          # process exec'd against root="." can't find it.
           STAGE=$(mktemp -d)
-          mkdir -p $STAGE/rootfs/{bin,etc,proc,sys,dev,tmp}
-          cp "$BUSYBOX" $STAGE/rootfs/bin/
-          ( cd $STAGE/rootfs/bin && for c in sh ls cat echo grep awk sleep true false test mkdir rm chmod chown touch stat date wc head tail sort uniq id ps mount umount; do ln -sf busybox $c; done )
+          mkdir -p $STAGE/{bin,etc,proc,sys,dev,tmp}
+          cp "$BUSYBOX" $STAGE/bin/
+          ( cd $STAGE/bin && for c in sh ls cat echo grep awk sleep true false test mkdir rm chmod chown touch stat date wc head tail sort uniq id ps mount umount; do ln -sf busybox $c; done )
           ARCH=$(uname -m)
           case "$ARCH" in
             aarch64|arm64) GOARCH=arm64 ;;
             x86_64|amd64)  GOARCH=amd64 ;;
             *)             GOARCH=$ARCH ;;
           esac
-          tar -czf $HOME/runtime-tools/rootfs-$GOARCH.tar.gz -C $STAGE rootfs
+          tar -czf $HOME/runtime-tools/rootfs-$GOARCH.tar.gz -C $STAGE .
 
       - name: Run validation suite
         id: run-validation
@@ -74,10 +78,20 @@ jobs:
           cd $HOME/runtime-tools
           RUNTIME=/opt/takoyaki/bin
           mkdir -p $HOME/validation-out
-          PASS=0; FAIL=0; ERROR=0; TIMEOUT=0
-          declare -a FAIL_NAMES TIMEOUT_NAMES
+          PASS=0; FAIL=0; ERROR=0; TIMEOUT=0; SKIP_V1=0
+          declare -a FAIL_NAMES TIMEOUT_NAMES SKIP_V1_NAMES
+          # Cgroup v1 tests are skipped on cgroup-v2 only hosts because they probe
+          # v1 hierarchies (net_cls, blkio, hugetlb) that the kernel does not
+          # expose. Ubuntu 22.04+ is cgroup-v2 only.
+          SKIP_PATTERN='^(linux_cgroups_(network|blkio|hugetlb|relative_(blkio|network|hugetlb|devices|pids))|linux_cgroups_relative_cpus|linux_cgroups_relative_memory|linux_cgroups_cpus|linux_cgroups_memory)$'
           for t in validation/*/*.t; do
             name=$(basename "$t" .t)
+            if echo "$name" | grep -qE "$SKIP_PATTERN"; then
+              SKIP_V1=$((SKIP_V1+1))
+              SKIP_V1_NAMES+=("$name")
+              echo "SKIP(v1) $name"
+              continue
+            fi
             out=$HOME/validation-out/$name.log
             sudo timeout 60 env RUNTIME=$RUNTIME "$t" > "$out" 2>&1
             rc=$?
@@ -108,7 +122,7 @@ jobs:
             fi
           done
           echo "=== SUMMARY ==="
-          echo "PASS=$PASS  FAIL=$FAIL  TIMEOUT=$TIMEOUT  ERROR=$ERROR"
+          echo "PASS=$PASS  FAIL=$FAIL  TIMEOUT=$TIMEOUT  ERROR=$ERROR  SKIP_V1=$SKIP_V1"
           {
             echo "## OCI runtime-tools validation"
             echo
@@ -118,6 +132,7 @@ jobs:
             echo "| fail | $FAIL |"
             echo "| timeout | $TIMEOUT |"
             echo "| error | $ERROR |"
+            echo "| skip (cgroup v1) | $SKIP_V1 |"
             echo
             if [ ${#FAIL_NAMES[@]} -gt 0 ]; then
               echo "### Failing tests"

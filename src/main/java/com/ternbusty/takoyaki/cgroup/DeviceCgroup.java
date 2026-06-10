@@ -68,10 +68,40 @@ public final class DeviceCgroup {
 
     private DeviceCgroup() {}
 
+    private static Spec.LinuxDeviceCgroup allow(String type, Long major, Long minor, String access) {
+        Spec.LinuxDeviceCgroup r = new Spec.LinuxDeviceCgroup();
+        r.allow = true;
+        r.type = type;
+        r.major = major;
+        r.minor = minor;
+        r.access = access;
+        return r;
+    }
+
     public static void apply(String cgroupPath, List<Spec.LinuxDeviceCgroup> rules) {
         if (rules == null || rules.isEmpty()) return;
 
-        byte[] prog = buildProgram(rules);
+        // OCI spec: "The runtime SHOULD allow ... [the default device set]". The
+        // default config from runtime-tools (and runc-generated config.json) only
+        // lists the catch-all {allow:false, access:"rwm"} and leaves it to the
+        // runtime to grant the standard devices on top. We prepend allow rules
+        // for the OCI default set so that a "deny everything" rule from the spec
+        // doesn't end up blocking /dev/null and friends, which would break sh's
+        // own backgrounding (which redirects stdin from /dev/null) and most user
+        // workloads. This matches runc's defaultAllowedDevices behaviour.
+        java.util.List<Spec.LinuxDeviceCgroup> effective = new java.util.ArrayList<>();
+        effective.add(allow("c", 1L, 3L, "rwm")); // /dev/null
+        effective.add(allow("c", 1L, 5L, "rwm")); // /dev/zero
+        effective.add(allow("c", 1L, 7L, "rwm")); // /dev/full
+        effective.add(allow("c", 1L, 8L, "rwm")); // /dev/random
+        effective.add(allow("c", 1L, 9L, "rwm")); // /dev/urandom
+        effective.add(allow("c", 5L, 0L, "rwm")); // /dev/tty
+        effective.add(allow("c", 5L, 1L, "rwm")); // /dev/console
+        effective.add(allow("c", 5L, 2L, "rwm")); // /dev/ptmx
+        effective.add(allow("c", 136L, null, "rwm")); // pts/* (major 136, any minor)
+        effective.addAll(rules);
+
+        byte[] prog = buildProgram(effective);
         Logger.debug("built cgroup_device bpf program, " + (prog.length / 8) + " insns");
 
         try (Arena arena = Arena.ofConfined()) {
