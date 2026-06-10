@@ -42,6 +42,28 @@ public final class Devices {
 
                 int rc = Libc.mknod(arena, target, mode, dev);
                 if (rc == 0) {
+                    // mknod respects the umask, so a spec fileMode like 0660 lands
+                    // as 0640 with the default 0022 umask. Re-chmod to the requested
+                    // mode (the type bits aren't allowed in chmod, so mask them out).
+                    try {
+                        if (d.fileMode != null) {
+                            int permBits = d.fileMode.intValue() & 0777;
+                            java.util.Set<java.nio.file.attribute.PosixFilePermission> perms =
+                                    new java.util.HashSet<>();
+                            if ((permBits & 0400) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
+                            if ((permBits & 0200) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
+                            if ((permBits & 0100) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE);
+                            if ((permBits & 0040) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_READ);
+                            if ((permBits & 0020) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_WRITE);
+                            if ((permBits & 0010) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE);
+                            if ((permBits & 0004) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_READ);
+                            if ((permBits & 0002) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_WRITE);
+                            if ((permBits & 0001) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE);
+                            Files.setPosixFilePermissions(Path.of(target), perms);
+                        }
+                    } catch (Exception e) {
+                        Logger.debug("chmod " + d.path + " failed: " + e.getMessage());
+                    }
                     Logger.debug("mknod " + d.path + " (" + d.type + " " + d.major + ":" + d.minor + ")");
                     continue;
                 }

@@ -1,0 +1,134 @@
+name: OCI runtime-tools validation
+
+# Builds takoyaki with native-image, then runs the OCI runtime-spec validation
+# suite (opencontainers/runtime-tools) against the resulting binary. Failures
+# are summarized in a final step; the job intentionally does not fail on
+# individual test failures — the suite has tests that fundamentally don't
+# apply on a cgroup-v2-only host (linux_cgroups_network etc.) and the goal of
+# this workflow is to surface regressions, not to gate merges on every test.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: runtime-tools validation
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Go and TAP tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y golang-go make perl libseccomp-dev
+
+      - name: Install GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+
+      - name: Build native takoyaki
+        run: |
+          ./gradlew nativeCompile --no-daemon --info
+          mkdir -p $HOME/work
+          cp build/native/nativeCompile/takoyaki $HOME/work/takoyaki
+          $HOME/work/takoyaki --version
+
+      - name: Clone and build runtime-tools validation suite
+        run: |
+          cd $HOME
+          git clone --depth 1 https://github.com/opencontainers/runtime-tools
+          cd runtime-tools
+          make runtimetest validation-executables
+
+      - name: Build busybox rootfs tarball
+        run: |
+          set -eux
+          BUSYBOX=$(which busybox || true)
+          if [ -z "$BUSYBOX" ]; then
+            sudo apt-get install -y busybox-static
+            BUSYBOX=$(which busybox)
+          fi
+          STAGE=$(mktemp -d)
+          mkdir -p $STAGE/rootfs/{bin,etc,proc,sys,dev,tmp}
+          cp "$BUSYBOX" $STAGE/rootfs/bin/
+          ( cd $STAGE/rootfs/bin && for c in sh ls cat echo grep awk sleep true false test mkdir rm chmod chown touch stat date wc head tail sort uniq id ps mount umount; do ln -sf busybox $c; done )
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            aarch64|arm64) GOARCH=arm64 ;;
+            x86_64|amd64)  GOARCH=amd64 ;;
+            *)             GOARCH=$ARCH ;;
+          esac
+          tar -czf $HOME/runtime-tools/rootfs-$GOARCH.tar.gz -C $STAGE rootfs
+
+      - name: Run validation suite
+        id: run-validation
+        run: |
+          set +e
+          cd $HOME/runtime-tools
+          RUNTIME=$HOME/work/takoyaki
+          mkdir -p $HOME/validation-out
+          PASS=0; FAIL=0; ERROR=0; TIMEOUT=0
+          declare -a FAIL_NAMES TIMEOUT_NAMES
+          for t in validation/*/*.t; do
+            name=$(basename "$t" .t)
+            out=$HOME/validation-out/$name.log
+            sudo timeout 60 env RUNTIME=$RUNTIME "$t" > "$out" 2>&1
+            rc=$?
+            sudo $RUNTIME delete --force "$name" 2>/dev/null || true
+            sudo rm -rf /run/takoyaki/* /tmp/takoyaki-*.sock 2>/dev/null || true
+            sudo rmdir /sys/fs/cgroup/takoyaki* 2>/dev/null || true
+            if [ "$rc" -eq 124 ]; then
+              TIMEOUT=$((TIMEOUT+1))
+              TIMEOUT_NAMES+=("$name")
+              echo "TIMEOUT  $name"
+              continue
+            fi
+            n_ok=$(grep -c "^ok " "$out" 2>/dev/null)
+            n_notok=$(grep -c "^not ok " "$out" 2>/dev/null)
+            n_ok=${n_ok:-0}; n_notok=${n_notok:-0}
+            if [ "$n_notok" -gt 0 ]; then
+              FAIL=$((FAIL+1))
+              FAIL_NAMES+=("$name (ok=$n_ok notok=$n_notok)")
+              echo "FAIL     $name  ok=$n_ok notok=$n_notok"
+            elif [ "$n_ok" -gt 0 ]; then
+              PASS=$((PASS+1))
+              echo "PASS     $name  ok=$n_ok"
+            elif [ "$rc" -ne 0 ]; then
+              ERROR=$((ERROR+1))
+              echo "ERROR    $name  rc=$rc"
+            else
+              echo "SKIP     $name"
+            fi
+          done
+          echo "=== SUMMARY ==="
+          echo "PASS=$PASS  FAIL=$FAIL  TIMEOUT=$TIMEOUT  ERROR=$ERROR"
+          {
+            echo "## OCI runtime-tools validation"
+            echo
+            echo "| metric | count |"
+            echo "|---|---|"
+            echo "| pass | $PASS |"
+            echo "| fail | $FAIL |"
+            echo "| timeout | $TIMEOUT |"
+            echo "| error | $ERROR |"
+            echo
+            if [ ${#FAIL_NAMES[@]} -gt 0 ]; then
+              echo "### Failing tests"
+              for n in "${FAIL_NAMES[@]}"; do
+                echo "- $n"
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload per-test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-logs
+          path: ~/validation-out/
