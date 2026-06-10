@@ -133,7 +133,8 @@ public final class DeviceCgroup {
         }
     }
 
-    private static byte[] buildProgram(List<Spec.LinuxDeviceCgroup> rules) {
+    // Package-visible so the unit test suite can pin the emitted bytecode.
+    static byte[] buildProgram(List<Spec.LinuxDeviceCgroup> rules) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         // Setup: load ctx fields into R2 (access_type), then derive R3 (access bits),
         // R4 (dev type), R5 (major), R6 (minor).
