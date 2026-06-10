@@ -111,8 +111,11 @@ public final class MainProcess {
             // both fire in the runtime namespace after the container is configured but
             // before the user process is started.
             if (spec.hooks != null) {
-                Hooks.run(spec.hooks.prestart, state, "prestart");
-                Hooks.run(spec.hooks.createRuntime, state, "createRuntime");
+                // prestart (deprecated) and createRuntime are FAILABLE per OCI
+                // spec — a non-zero exit MUST abort create. The exception
+                // propagates up to the surrounding catch which _exit(1)s.
+                Hooks.runFailFast(spec.hooks.prestart, state, "prestart");
+                Hooks.runFailFast(spec.hooks.createRuntime, state, "createRuntime");
             }
 
             if (pidFile != null) {

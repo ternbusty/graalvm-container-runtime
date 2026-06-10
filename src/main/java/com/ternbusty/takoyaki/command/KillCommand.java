@@ -25,6 +25,17 @@ public final class KillCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        // Parse the signal BEFORE loading state — signal parsing is cheap
+        // and a typo on the signal name is the most user-fixable error here.
+        // Reporting "invalid signal" first beats reporting "no such container"
+        // first when both are wrong, because the user can correct the signal
+        // and the next attempt at least surfaces the container error.
+        int sig;
+        try { sig = parseSignal(signal); }
+        catch (IllegalArgumentException e) {
+            Logger.error("invalid signal: " + signal);
+            return 1;
+        }
         State state;
         try {
             state = State.load(root.rootPath, containerId).refreshStatus();
@@ -38,12 +49,6 @@ public final class KillCommand implements Callable<Integer> {
         }
         if (state.pid == null) {
             Logger.error("no pid in state");
-            return 1;
-        }
-        int sig;
-        try { sig = parseSignal(signal); }
-        catch (IllegalArgumentException e) {
-            Logger.error("invalid signal: " + signal);
             return 1;
         }
         Syscalls sc = SyscallHost.current();

@@ -16,11 +16,40 @@ import java.util.concurrent.TimeUnit;
  *
  * Each hook is an external command. We pipe the container's current state JSON
  * to the hook's stdin, as required by the OCI runtime spec.
+ *
+ * The OCI spec distinguishes two hook severities:
+ *   - "failable" hooks (prestart, createRuntime, createContainer, startContainer)
+ *     MUST abort the lifecycle if they return non-zero. Use {@link #runFailFast}.
+ *   - post-* hooks (poststart, poststop) are best-effort. A failure is logged
+ *     but the lifecycle proceeds. Use {@link #run}.
+ *
+ * The single-method "log warn and continue" we used to have was non-conformant
+ * for the failable hooks — a prestart returning 17 would still let create
+ * complete, which violates the spec.
  */
 public final class Hooks {
     private Hooks() {}
 
+    /**
+     * Run post-* hooks. Failures are logged but never propagate; that's the
+     * OCI semantics for poststart / poststop.
+     */
     public static void run(List<Spec.Hook> hooks, State state, String phase) {
+        runEach(hooks, state, phase, false);
+    }
+
+    /**
+     * Run failable hooks (prestart / createRuntime / createContainer /
+     * startContainer). The first non-zero exit or timeout aborts the loop
+     * and throws — the caller is expected to surface this as a create/start
+     * failure.
+     */
+    public static void runFailFast(List<Spec.Hook> hooks, State state, String phase) {
+        runEach(hooks, state, phase, true);
+    }
+
+    private static void runEach(List<Spec.Hook> hooks, State state, String phase,
+                                boolean failFast) {
         if (hooks == null || hooks.isEmpty()) return;
         String stateJson = Json.encode(state);
         for (Spec.Hook h : hooks) {
@@ -45,17 +74,23 @@ public final class Hooks {
                 boolean done = p.waitFor(timeout, TimeUnit.SECONDS);
                 if (!done) {
                     p.destroyForcibly();
-                    Logger.warn("hook " + phase + " " + h.path + " timeout after " + timeout + "s");
+                    String msg = "hook " + phase + " " + h.path + " timeout after " + timeout + "s";
+                    if (failFast) throw new RuntimeException(msg);
+                    Logger.warn(msg);
                     continue;
                 }
                 int rc = p.exitValue();
                 if (rc != 0) {
-                    Logger.warn("hook " + phase + " " + h.path + " exit=" + rc);
+                    String msg = "hook " + phase + " " + h.path + " exit=" + rc;
+                    if (failFast) throw new RuntimeException(msg);
+                    Logger.warn(msg);
                 } else {
                     Logger.debug("hook " + phase + " " + h.path + " ok");
                 }
             } catch (IOException | InterruptedException e) {
-                Logger.warn("hook " + phase + " " + h.path + " failed: " + e.getMessage());
+                String msg = "hook " + phase + " " + h.path + " failed: " + e.getMessage();
+                if (failFast) throw new RuntimeException(msg, e);
+                Logger.warn(msg);
             }
         }
     }
