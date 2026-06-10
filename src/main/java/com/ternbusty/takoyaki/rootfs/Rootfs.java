@@ -263,38 +263,11 @@ public final class Rootfs {
                 || m.destination.equals("/sys/fs/cgroup")) continue;
             String target = rootfsPath + m.destination;
             String type = m.type != null ? m.type : "none";
-            boolean isBind = m.options != null && (m.options.contains("bind") || m.options.contains("rbind"));
-            long flags = 0;
-            long propagation = 0;
-            StringBuilder data = new StringBuilder();
-            if (m.options != null) {
-                for (String o : m.options) {
-                    switch (o) {
-                        case "bind": flags |= Constants.MS_BIND; break;
-                        case "rbind": flags |= Constants.MS_BIND | Constants.MS_REC; break;
-                        case "ro": flags |= Constants.MS_RDONLY; break;
-                        case "nosuid": flags |= Constants.MS_NOSUID; break;
-                        case "noexec": flags |= Constants.MS_NOEXEC; break;
-                        case "nodev": flags |= Constants.MS_NODEV; break;
-                        case "noatime": flags |= Constants.MS_NOATIME; break;
-                        case "relatime": flags |= Constants.MS_RELATIME; break;
-                        case "strictatime": flags |= Constants.MS_STRICTATIME; break;
-                        case "nosymfollow": flags |= Constants.MS_NOSYMFOLLOW; break;
-                        case "rec": flags |= Constants.MS_REC; break;
-                        case "shared":      propagation = Constants.MS_SHARED;      break;
-                        case "rshared":     propagation = Constants.MS_SHARED | Constants.MS_REC; break;
-                        case "slave":       propagation = Constants.MS_SLAVE;       break;
-                        case "rslave":      propagation = Constants.MS_SLAVE | Constants.MS_REC; break;
-                        case "private":     propagation = Constants.MS_PRIVATE;     break;
-                        case "rprivate":    propagation = Constants.MS_PRIVATE | Constants.MS_REC; break;
-                        case "unbindable":  propagation = Constants.MS_UNBINDABLE;  break;
-                        case "runbindable": propagation = Constants.MS_UNBINDABLE | Constants.MS_REC; break;
-                        default:
-                            if (data.length() > 0) data.append(",");
-                            data.append(o);
-                    }
-                }
-            }
+            MountOptions.Parsed parsed = MountOptions.parse(m.options);
+            long flags = parsed.flags;
+            long propagation = parsed.propagation;
+            String data = parsed.data;
+            boolean isBind = parsed.isBind;
             try { Files.createDirectories(Path.of(target)); } catch (IOException ignored) {}
 
             // Id-mapped mounts: if uidMappings/gidMappings are present we route the
@@ -319,8 +292,7 @@ public final class Rootfs {
                 Logger.warn("idmap mount failed for " + m.destination + ", falling back to plain bind");
             }
 
-            int rc = Libc.mount(arena, m.source, target, isBind ? null : type, flags,
-                    data.length() > 0 ? data.toString() : null);
+            int rc = Libc.mount(arena, m.source, target, isBind ? null : type, flags, data);
             if (rc != 0) {
                 Logger.debug("optional mount " + m.destination + " failed: "
                         + Libc.strerror(Libc.errno()));
