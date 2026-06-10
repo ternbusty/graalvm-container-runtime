@@ -160,6 +160,60 @@ void takoyaki_bootstrap(void) {
         exit(1);
     }
 
+    /* Join existing namespaces specified via spec.linux.namespaces[].path.
+     * CreateCommand opens the path on the host (host's /proc) and passes the
+     * fds through _TAKOYAKI_NS_FDS=type:fd,type:fd,... so we can call setns
+     * here before any unshare. The user fd, if any, is processed first so
+     * subsequent setns/unshare calls operate inside the joined user namespace.
+     * Format mirrors the env var written in CreateCommand. */
+    char *ns_fds_env = getenv("_TAKOYAKI_NS_FDS");
+    if (ns_fds_env && *ns_fds_env) {
+        char *copy = strdup(ns_fds_env);
+        if (!copy) {
+            fprintf(stderr, "[stage-1] strdup ns_fds_env failed\n");
+            exit(1);
+        }
+        /* Two passes: user first, then everything else. */
+        for (int pass = 0; pass < 2; pass++) {
+            char *saveptr = NULL;
+            char *src = strdup(copy);
+            if (!src) {
+                fprintf(stderr, "[stage-1] strdup failed\n");
+                exit(1);
+            }
+            char *token = strtok_r(src, ",", &saveptr);
+            while (token) {
+                char *colon = strchr(token, ':');
+                if (colon) {
+                    *colon = '\0';
+                    const char *type = token;
+                    int fd = atoi(colon + 1);
+                    int is_user = strcmp(type, "user") == 0;
+                    if ((pass == 0 && is_user) || (pass == 1 && !is_user)) {
+                        int nstype = 0;
+                        if      (strcmp(type, "user")    == 0) nstype = CLONE_NEWUSER;
+                        else if (strcmp(type, "ipc")     == 0) nstype = CLONE_NEWIPC;
+                        else if (strcmp(type, "uts")     == 0) nstype = CLONE_NEWUTS;
+                        else if (strcmp(type, "network") == 0) nstype = CLONE_NEWNET;
+                        else if (strcmp(type, "pid")     == 0) nstype = CLONE_NEWPID;
+                        else if (strcmp(type, "mount")   == 0) nstype = CLONE_NEWNS;
+                        else if (strcmp(type, "cgroup")  == 0) nstype = CLONE_NEWCGROUP;
+                        else if (strcmp(type, "time")    == 0) nstype = CLONE_NEWTIME;
+                        DBG("[stage-1] setns(fd=%d, %s)\n", fd, type);
+                        if (setns(fd, nstype) < 0) {
+                            fprintf(stderr, "[stage-1] setns(%s, fd=%d) failed: %s\n",
+                                    type, fd, strerror(errno));
+                            exit(1);
+                        }
+                    }
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+            }
+            free(src);
+        }
+        free(copy);
+    }
+
     if (clone_flags & CLONE_NEWUSER) {
         DBG("[stage-1] unshare(CLONE_NEWUSER)\n");
         if (unshare(CLONE_NEWUSER) < 0) {

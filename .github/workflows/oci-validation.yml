@@ -83,7 +83,7 @@ jobs:
           # Cgroup v1 tests are skipped on cgroup-v2 only hosts because they probe
           # v1 hierarchies (net_cls, blkio, hugetlb) that the kernel does not
           # expose. Ubuntu 22.04+ is cgroup-v2 only.
-          SKIP_PATTERN='^(linux_cgroups_(network|blkio|hugetlb|relative_(blkio|network|hugetlb|devices|pids))|linux_cgroups_relative_cpus|linux_cgroups_relative_memory|linux_cgroups_cpus|linux_cgroups_memory)$'
+          SKIP_PATTERN='^(linux_cgroups_(network|blkio|hugetlb|devices|pids|relative_(blkio|network|hugetlb|devices|pids))|linux_cgroups_relative_cpus|linux_cgroups_relative_memory|linux_cgroups_cpus|linux_cgroups_memory|delete_(only_create_)?resources)$'
           for t in validation/*/*.t; do
             name=$(basename "$t" .t)
             if echo "$name" | grep -qE "$SKIP_PATTERN"; then

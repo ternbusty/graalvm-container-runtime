@@ -35,9 +35,12 @@ public final class MainProcess {
             if (spec.linux != null && spec.linux.cgroupsPath != null) {
                 Cgroup.setup(stage1Pid, spec.linux.cgroupsPath, spec.linux);
             }
-            if (spec.process != null && spec.process.rlimits != null) {
-                Rlimit.apply(stage1Pid, spec.process.rlimits);
-            }
+            // rlimits are NOT applied to the bootstrap pid from here — doing so
+            // forces them on the freshly-spawned Java init, and a low RLIMIT_AS
+            // (e.g. the OCI runtime-tools process_rlimits test sets 1 GiB soft)
+            // makes GraalVM's main isolate fail to create. They're applied
+            // inside InitProcess, AFTER the JVM has come up, so only the user
+            // process inherits the spec's resource caps.
 
             boolean hasUserNs = spec.hasNamespace("user");
             if (hasUserNs) {
@@ -98,7 +101,7 @@ public final class MainProcess {
             Logger.debug("init ready");
 
             State state = State.create(spec.ociVersion, containerId,
-                    ContainerStatus.CREATED, stage2Pid, bundlePath, null);
+                    ContainerStatus.CREATED, stage2Pid, bundlePath, spec.annotations);
             state.save(rootPath);
 
             new KontainerConfig(spec.linux != null ? spec.linux.cgroupsPath : null)

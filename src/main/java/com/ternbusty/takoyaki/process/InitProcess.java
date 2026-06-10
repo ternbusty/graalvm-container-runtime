@@ -79,6 +79,19 @@ public final class InitProcess {
             // the Java init), because /proc/self/timens_offsets is no longer writable
             // after exec or after gettimeofday is called. The Java init cannot do it.
 
+            // Apply process.oomScoreAdj. Writes to /proc/self/oom_score_adj so it
+            // is inherited by the user process after exec.
+            if (spec.process != null && spec.process.oomScoreAdj != null) {
+                try {
+                    java.nio.file.Files.writeString(
+                            java.nio.file.Path.of("/proc/self/oom_score_adj"),
+                            spec.process.oomScoreAdj.toString());
+                    Logger.debug("oom_score_adj=" + spec.process.oomScoreAdj);
+                } catch (java.io.IOException e) {
+                    Logger.warn("write oom_score_adj failed: " + e.getMessage());
+                }
+            }
+
             // Parse pre-prepared idmap helper fds passed via env from CreateCommand.
             // Keys are base64-encoded destination paths; values are fd numbers
             // referring to /proc/<helper>/ns/user opened in the host pid/user ns,
@@ -103,7 +116,8 @@ public final class InitProcess {
                 if (spec.linux != null && spec.linux.devices != null) {
                     Devices.create(rootfsPath, spec.linux.devices);
                 }
-                Rootfs.pivot(rootfsPath);
+                Rootfs.pivot(rootfsPath,
+                        spec.linux != null ? spec.linux.rootfsPropagation : null);
             } else {
                 Logger.debug("no mount namespace, skipping rootfs prep");
             }
@@ -278,6 +292,16 @@ public final class InitProcess {
 
             String[] argv = spec.process.args.toArray(new String[0]);
             Logger.info("executing: " + String.join(" ", argv));
+
+            // Apply process.rlimits LAST — after the JVM has done all its heap
+            // and address-space provisioning. If we did this earlier, a low
+            // RLIMIT_AS (e.g. 1 GiB) would push the JVM's already-mapped heap
+            // over the limit and the very next allocation would OOM. The
+            // about-to-execve user process picks up the new limits.
+            if (spec.process.rlimits != null) {
+                com.ternbusty.takoyaki.syscall.Rlimit.apply(Libc.getpid(), spec.process.rlimits);
+            }
+
             Libc.execvp(arena, argv[0], argv);
             Logger.error("execvp failed: " + Libc.strerror(Libc.errno()));
             PosixIO._exit(127);

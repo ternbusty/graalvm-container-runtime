@@ -73,6 +73,15 @@ public final class CreateCommand implements Callable<Integer> {
             return 1;
         }
 
+        // OCI spec: the runtime MUST reject configs that contain invalid /
+        // unsupported values. ociVersion must be a semver-like string. Anything
+        // else (e.g. "invalid" — runtime-tools misc_props test) is rejected.
+        if (spec.ociVersion == null
+                || !spec.ociVersion.matches("\\d+\\.\\d+(\\.\\d+)?(-[\\w.+-]+)?")) {
+            Logger.error("invalid ociVersion: " + spec.ociVersion);
+            return 1;
+        }
+
         String rootfsPath = spec.root.path.startsWith("/")
                 ? spec.root.path
                 : bundle + "/" + spec.root.path;
@@ -125,6 +134,29 @@ public final class CreateCommand implements Callable<Integer> {
         if (root.debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
         if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         if (noNewKeyring) envList.add("_TAKOYAKI_NO_NEW_KEYRING=1");
+
+        // Namespaces with an explicit `path` field: open the path on the host so
+        // bootstrap.c can join via setns() instead of unshare(). The fd survives
+        // fork+execve because we don't set CLOEXEC. Names match `setns` nstype
+        // constants in bootstrap.c's switch table.
+        if (spec.linux != null && spec.linux.namespaces != null) {
+            StringBuilder nsFds = new StringBuilder();
+            try (Arena openArena = Arena.ofConfined()) {
+                for (Spec.Namespace ns : spec.linux.namespaces) {
+                    if (ns.path == null || ns.path.isEmpty()) continue;
+                    int fd = PosixIO.open(openArena, ns.path, Constants.O_RDONLY, 0);
+                    if (fd < 0) {
+                        Logger.error("open ns path " + ns.path + " failed: " + Libc.strerror(Libc.errno()));
+                        return 1;
+                    }
+                    if (nsFds.length() > 0) nsFds.append(',');
+                    nsFds.append(ns.type).append(':').append(fd);
+                }
+            }
+            if (nsFds.length() > 0) {
+                envList.add("_TAKOYAKI_NS_FDS=" + nsFds.toString());
+            }
+        }
 
         // Mount idmap: set up helper user namespaces on the HOST (where we can use
         // host pids to address /proc), keep the userns_fd open, pass it to the init

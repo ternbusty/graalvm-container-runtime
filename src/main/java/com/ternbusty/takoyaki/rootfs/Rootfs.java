@@ -28,6 +28,9 @@ public final class Rootfs {
                 throw new RuntimeException("rootfs not found: " + rootfsPath);
             }
 
+            // Always set / to slave|rec BEFORE pivot_root. pivot_root requires the
+            // new root (and its parent) not to be MS_SHARED. spec.linux.rootfsPropagation
+            // is applied AFTER pivot_root, see pivot().
             Logger.debug("set / propagation to slave");
             if (Libc.mount(arena, null, "/", null,
                     Constants.MS_SLAVE | Constants.MS_REC, null) != 0) {
@@ -352,6 +355,10 @@ public final class Rootfs {
     }
 
     public static void pivot(String newRoot) {
+        pivot(newRoot, null);
+    }
+
+    public static void pivot(String newRoot, String rootfsPropagation) {
         try (Arena arena = Arena.ofConfined()) {
             Logger.debug("pivot_root to " + newRoot);
             int newrootFd = PosixIO.open(arena, newRoot,
@@ -378,6 +385,31 @@ public final class Rootfs {
             }
             if (Libc.chdir(arena, "/") != 0) {
                 throw new RuntimeException("chdir /: " + Libc.strerror(Libc.errno()));
+            }
+            // Apply spec.linux.rootfsPropagation to the new "/" — this is the
+            // user-visible propagation mode inside the container. It has to
+            // happen post-pivot because pivot_root rejects MS_SHARED on the
+            // new root and its parent.
+            if (rootfsPropagation != null) {
+                long prop = switch (rootfsPropagation) {
+                    case "shared"      -> Constants.MS_SHARED;
+                    case "rshared"     -> Constants.MS_SHARED | Constants.MS_REC;
+                    case "slave"       -> Constants.MS_SLAVE;
+                    case "rslave"      -> Constants.MS_SLAVE | Constants.MS_REC;
+                    case "private"     -> Constants.MS_PRIVATE;
+                    case "rprivate"    -> Constants.MS_PRIVATE | Constants.MS_REC;
+                    case "unbindable"  -> Constants.MS_UNBINDABLE;
+                    case "runbindable" -> Constants.MS_UNBINDABLE | Constants.MS_REC;
+                    default            -> 0L;
+                };
+                if (prop != 0) {
+                    if (Libc.mount(arena, null, "/", null, prop, null) != 0) {
+                        Logger.warn("set / to " + rootfsPropagation + " failed: "
+                                + Libc.strerror(Libc.errno()));
+                    } else {
+                        Logger.debug("/ propagation set to " + rootfsPropagation);
+                    }
+                }
             }
             Logger.debug("pivot_root completed");
         }

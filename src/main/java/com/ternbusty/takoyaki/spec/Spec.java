@@ -45,6 +45,7 @@ public final class Spec {
         public String selinuxLabel;
         public Boolean terminal;
         public Box consoleSize;
+        public Integer oomScoreAdj;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
