@@ -16,13 +16,13 @@
         { "section": "🐛 Bug Fixes",                 "type": "fix" },
         { "section": "⚡ Performance Improvements",  "type": "perf" },
         { "section": "🔗 Dependencies",              "type": "deps" },
-        { "section": "📝 Documentation",             "type": "docs" },
-        { "section": "🏗️ Build System",              "type": "build", "hidden": true },
-        { "section": "🤖 Continuous Integration",    "type": "ci",    "hidden": true },
-        { "section": "🔧 Miscellaneous Chores",      "type": "chore" },
-        { "section": "⏪ Reverts",                   "type": "revert", "hidden": true },
-        { "section": "✅ Tests",                    "type": "test",  "hidden": true },
-        { "section": "💄 Style",                    "type": "style", "hidden": true },
-        { "section": "♻️ Code Refactoring",          "type": "refactor" }
+        { "section": "📝 Documentation",             "type": "docs",     "hidden": true },
+        { "section": "🏗️ Build System",              "type": "build",    "hidden": true },
+        { "section": "🤖 Continuous Integration",    "type": "ci",       "hidden": true },
+        { "section": "🔧 Miscellaneous Chores",      "type": "chore",    "hidden": true },
+        { "section": "⏪ Reverts",                   "type": "revert",   "hidden": true },
+        { "section": "✅ Tests",                    "type": "test",     "hidden": true },
+        { "section": "💄 Style",                    "type": "style",    "hidden": true },
+        { "section": "♻️ Code Refactoring",          "type": "refactor", "hidden": true }
     ]
 }
