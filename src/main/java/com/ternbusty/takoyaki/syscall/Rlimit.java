@@ -3,7 +3,6 @@ package com.ternbusty.takoyaki.syscall;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 
-import java.lang.foreign.Arena;
 import java.util.List;
 
 public final class Rlimit {
@@ -11,19 +10,18 @@ public final class Rlimit {
 
     public static void apply(int pid, List<Spec.POSIXRlimit> rlimits) {
         if (rlimits == null || rlimits.isEmpty()) return;
-        try (Arena arena = Arena.ofConfined()) {
-            for (Spec.POSIXRlimit r : rlimits) {
-                int resource = resourceId(r.type);
-                if (resource < 0) {
-                    Logger.warn("unknown rlimit type: " + r.type);
-                    continue;
-                }
-                int rc = Libc.prlimit64(arena, pid, resource, r.soft, r.hard);
-                if (rc != 0) {
-                    Logger.warn("prlimit64 " + r.type + " failed: " + Libc.strerror(Libc.errno()));
-                } else {
-                    Logger.debug("rlimit " + r.type + " soft=" + r.soft + " hard=" + r.hard);
-                }
+        Syscalls sc = SyscallHost.current();
+        for (Spec.POSIXRlimit r : rlimits) {
+            int resource = resourceId(r.type);
+            if (resource < 0) {
+                Logger.warn("unknown rlimit type: " + r.type);
+                continue;
+            }
+            int rc = sc.prlimit64(pid, resource, r.soft, r.hard);
+            if (rc != 0) {
+                Logger.warn("prlimit64 " + r.type + " failed: " + sc.strerror(sc.errno()));
+            } else {
+                Logger.debug("rlimit " + r.type + " soft=" + r.soft + " hard=" + r.hard);
             }
         }
     }

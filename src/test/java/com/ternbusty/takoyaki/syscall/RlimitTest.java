@@ -1,15 +1,13 @@
 package com.ternbusty.takoyaki.syscall;
 
 import com.ternbusty.takoyaki.spec.Spec;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls.PrlimitCall;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
-import java.lang.foreign.Arena;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 class RlimitTest {
 
@@ -23,84 +21,86 @@ class RlimitTest {
 
     @Test
     void nullListDoesNothing() {
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             Rlimit.apply(123, null);
-            lm.verifyNoInteractions();
         }
+        assertTrue(rec.prlimitCalls().isEmpty());
     }
 
     @Test
     void emptyListDoesNothing() {
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             Rlimit.apply(123, List.of());
-            lm.verifyNoInteractions();
         }
+        assertTrue(rec.prlimitCalls().isEmpty());
     }
 
     @Test
     void eachKnownTypeRoutesToTheRightResourceId() {
-        // OCI process.rlimits is keyed by RLIMIT_* strings; we translate them
+        // OCI process.rlimits is keyed by RLIMIT_* strings. We translate them
         // to the kernel's `resource` enum and call prlimit64. This test pins
-        // the (string → kernel id) table — getting any one wrong would break
+        // the (string -> kernel id) table. Getting any one wrong would break
         // runtime-tools' process_rlimits assertions silently.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.prlimit64(any(Arena.class), anyInt(), anyInt(),
-                                          anyLong(), anyLong())).thenReturn(0);
-
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             Rlimit.apply(7777, List.of(
                     r("RLIMIT_NOFILE", 3000, 4000),
                     r("RLIMIT_AS",     1L<<30, 2L<<30),
                     r("RLIMIT_STACK",  9L<<30, 10L<<30),
                     r("RLIMIT_CPU",    60, 120),
                     r("RLIMIT_CORE",   3L<<30, 4L<<30)));
-
-            lm.verify(() -> Libc.prlimit64(any(Arena.class), eq(7777),
-                    eq(Constants.RLIMIT_NOFILE), eq(3000L), eq(4000L)));
-            lm.verify(() -> Libc.prlimit64(any(Arena.class), eq(7777),
-                    eq(Constants.RLIMIT_AS),     eq(1L<<30), eq(2L<<30)));
-            lm.verify(() -> Libc.prlimit64(any(Arena.class), eq(7777),
-                    eq(Constants.RLIMIT_STACK),  eq(9L<<30), eq(10L<<30)));
-            lm.verify(() -> Libc.prlimit64(any(Arena.class), eq(7777),
-                    eq(Constants.RLIMIT_CPU),    eq(60L), eq(120L)));
-            lm.verify(() -> Libc.prlimit64(any(Arena.class), eq(7777),
-                    eq(Constants.RLIMIT_CORE),   eq(3L<<30), eq(4L<<30)));
         }
+
+        List<PrlimitCall> calls = rec.prlimitCalls();
+        assertEquals(5, calls.size());
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_NOFILE, 3000L, 4000L), calls.get(0));
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_AS,     1L<<30, 2L<<30), calls.get(1));
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_STACK,  9L<<30, 10L<<30), calls.get(2));
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_CPU,    60L, 120L), calls.get(3));
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_CORE,   3L<<30, 4L<<30), calls.get(4));
     }
 
     @Test
     void unknownRlimitTypeIsSkippedNotFatal() {
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.prlimit64(any(), anyInt(), anyInt(), anyLong(), anyLong()))
-                    .thenReturn(0);
-            // Mix a known type with a garbage one; the known one must still go
-            // through and the unknown must NOT raise.
+        // Mix a known type with a garbage one. The known one must still go
+        // through and the unknown must NOT raise.
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             assertDoesNotThrow(() -> Rlimit.apply(7777, List.of(
                     r("RLIMIT_NOFILE", 100, 200),
                     r("RLIMIT_BOGUS",  1, 2))));
-            lm.verify(() -> Libc.prlimit64(any(), eq(7777),
-                    eq(Constants.RLIMIT_NOFILE), eq(100L), eq(200L)));
-            // The bogus type must NOT generate a prlimit64 call.
-            lm.verifyNoMoreInteractions();
         }
+
+        // Exactly one call: the known type only.
+        assertEquals(1, rec.prlimitCalls().size());
+        assertEquals(new PrlimitCall(7777, Constants.RLIMIT_NOFILE, 100L, 200L),
+                rec.prlimitCalls().get(0));
     }
 
     @Test
     void prlimitFailureWarnsButContinuesIteration() {
         // First prlimit64 fails, second one should still be attempted.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.prlimit64(any(), eq(1234),
-                    eq(Constants.RLIMIT_NOFILE), anyLong(), anyLong())).thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(1 /*EPERM*/);
-            lm.when(() -> Libc.strerror(anyInt())).thenReturn("Operation not permitted");
-            lm.when(() -> Libc.prlimit64(any(), eq(1234),
-                    eq(Constants.RLIMIT_AS), anyLong(), anyLong())).thenReturn(0);
+        // Use a sequence-aware stub: first call -> -1, second call -> 0.
+        int[] callIdx = {0};
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubPrlimitReturn(0)   // will be overridden below
+                .stubErrno(1 /*EPERM*/);
+        // Re-stub with a sequence supplier (last writer wins for stub knobs).
+        rec.stubPrlimitReturn(() -> IntStream.of(-1, 0).toArray()[callIdx[0]++]);
 
+        try (var s = SyscallHost.install(rec)) {
             Rlimit.apply(1234, List.of(
                     r("RLIMIT_NOFILE", 1, 1),
                     r("RLIMIT_AS",     2, 2)));
-
-            lm.verify(() -> Libc.prlimit64(any(), eq(1234),
-                    eq(Constants.RLIMIT_AS), eq(2L), eq(2L)));
         }
+
+        assertEquals(2, rec.prlimitCalls().size(),
+                "second prlimit must be attempted even though first failed");
+        assertEquals(new PrlimitCall(1234, Constants.RLIMIT_NOFILE, 1L, 1L),
+                rec.prlimitCalls().get(0));
+        assertEquals(new PrlimitCall(1234, Constants.RLIMIT_AS, 2L, 2L),
+                rec.prlimitCalls().get(1));
     }
 }

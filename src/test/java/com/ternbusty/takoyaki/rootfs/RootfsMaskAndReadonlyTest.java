@@ -1,49 +1,54 @@
 package com.ternbusty.takoyaki.rootfs;
 
 import com.ternbusty.takoyaki.syscall.Constants;
-import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls.MountCall;
+import com.ternbusty.takoyaki.syscall.SyscallHost;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
-import java.lang.foreign.Arena;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Mask / readonly-remount tests, rewritten to drive the youki-style
+ * {@link RecordingSyscalls} fake instead of Mockito {@code mockStatic(Libc)}.
+ * Same assertions, but the recording fake captures the mount(2) argument list
+ * directly so we can inspect order, source, target, and flags as data — no
+ * verify() incantations.
+ */
 class RootfsMaskAndReadonlyTest {
 
-    // ---- maskPaths -----------------------------------------------------------
+    // ---- maskPaths ----------------------------------------------------------
 
     @Test
     void maskPathsNullIsNoOp() {
         // Spec without maskedPaths must not poke any syscall.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.maskPaths(null);
-            lm.verifyNoInteractions();
         }
+        assertTrue(rec.mountCalls().isEmpty(),
+                "null maskedPaths must NOT call mount at all");
     }
 
     @Test
     void maskPathsBindMountsDevNullOverEachPath() {
         // Per OCI spec, masking a FILE is done by bind-mounting /dev/null over
-        // it. The kernel sees no content beneath. This is the default branch
-        // (rc == 0 from the first mount call).
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    nullable(String.class), anyLong(), nullable(String.class)))
-                    .thenReturn(0);
-
+        // it. Happy path: first mount returns 0 -> no fallback attempted.
+        RecordingSyscalls rec = new RecordingSyscalls().stubMountReturn(0);
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.maskPaths(List.of("/proc/kcore", "/sys/firmware"));
-
-            lm.verify(() -> Libc.mount(any(Arena.class),
-                    eq("/dev/null"), eq("/proc/kcore"),
-                    isNull(), eq(Constants.MS_BIND), isNull()));
-            lm.verify(() -> Libc.mount(any(Arena.class),
-                    eq("/dev/null"), eq("/sys/firmware"),
-                    isNull(), eq(Constants.MS_BIND), isNull()));
         }
+
+        List<MountCall> calls = rec.mountCalls();
+        assertEquals(2, calls.size(), "one mount per path");
+        assertEquals("/dev/null",   calls.get(0).source());
+        assertEquals("/proc/kcore", calls.get(0).target());
+        assertNull  (              calls.get(0).fstype());
+        assertEquals(Constants.MS_BIND, calls.get(0).flags());
+        assertEquals("/dev/null",   calls.get(1).source());
+        assertEquals("/sys/firmware", calls.get(1).target());
     }
 
     @Test
@@ -51,23 +56,23 @@ class RootfsMaskAndReadonlyTest {
         // /dev/null is a regular file, so bind-mounting it over a DIRECTORY
         // returns ENOTDIR. The runtime must fall back to mounting an empty
         // tmpfs read-only over the directory.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            // First call (bind /dev/null) fails.
-            lm.when(() -> Libc.mount(any(Arena.class), eq("/dev/null"), anyString(),
-                    isNull(), eq(Constants.MS_BIND), isNull())).thenReturn(-1);
-            // errno set to something that ISN'T ENOENT so we fall through to tmpfs.
-            lm.when(Libc::errno).thenReturn(20 /* ENOTDIR */);
-            lm.when(() -> Libc.strerror(anyInt())).thenReturn("error");
-            // The tmpfs fallback must succeed.
-            lm.when(() -> Libc.mount(any(Arena.class), eq("tmpfs"), anyString(),
-                    eq("tmpfs"), eq(Constants.MS_RDONLY), isNull())).thenReturn(0);
-
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubMountReturn(-1)              // both calls return failure...
+                .stubErrno(20 /* ENOTDIR */);     // ...but errno != ENOENT so we fall through
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.maskPaths(List.of("/proc/scsi"));
-
-            lm.verify(() -> Libc.mount(any(Arena.class), eq("tmpfs"),
-                    eq("/proc/scsi"), eq("tmpfs"),
-                    eq(Constants.MS_RDONLY), isNull()));
         }
+
+        List<MountCall> calls = rec.mountCalls();
+        assertEquals(2, calls.size(), "must attempt /dev/null bind THEN tmpfs");
+        // First attempt: /dev/null bind.
+        assertEquals("/dev/null",   calls.get(0).source());
+        assertEquals(Constants.MS_BIND, calls.get(0).flags());
+        // Second attempt: tmpfs fallback.
+        assertEquals("tmpfs",       calls.get(1).source());
+        assertEquals("tmpfs",       calls.get(1).fstype());
+        assertEquals(Constants.MS_RDONLY, calls.get(1).flags());
+        assertEquals("/proc/scsi",  calls.get(1).target());
     }
 
     @Test
@@ -75,35 +80,26 @@ class RootfsMaskAndReadonlyTest {
         // ENOENT after the first mount means the path isn't in the rootfs.
         // We skip rather than masking nothing or panicking. Critically, the
         // tmpfs fallback must NOT run for ENOENT.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    nullable(String.class), anyLong(), nullable(String.class)))
-                    .thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(Constants.ENOENT);
-
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubMountReturn(-1)
+                .stubErrno(Constants.ENOENT);
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.maskPaths(List.of("/not/in/rootfs"));
-
-            // ONLY the first /dev/null bind attempt should have happened.
-            lm.verify(() -> Libc.mount(any(Arena.class), eq("/dev/null"),
-                    eq("/not/in/rootfs"), isNull(), eq(Constants.MS_BIND), isNull()));
-            // No tmpfs fallback for ENOENT.
-            lm.verify(() -> Libc.mount(any(Arena.class), eq("tmpfs"),
-                    anyString(), eq("tmpfs"), anyLong(), nullable(String.class)),
-                    never());
         }
+
+        List<MountCall> calls = rec.mountCalls();
+        assertEquals(1, calls.size(), "tmpfs fallback must NOT run for ENOENT");
+        assertEquals("/dev/null", calls.get(0).source());
     }
 
     @Test
     void maskPathsBothMountsFailingIsLoggedNotThrown() {
         // If even the tmpfs fallback fails, the runtime must not crash. The
-        // container will still come up just without that mask.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    nullable(String.class), anyLong(), nullable(String.class)))
-                    .thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(13 /* EACCES */);
-            lm.when(() -> Libc.strerror(anyInt())).thenReturn("error");
-
+        // container still comes up, just without that mask.
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubMountReturn(-1)
+                .stubErrno(13 /* EACCES */);
+        try (var s = SyscallHost.install(rec)) {
             assertDoesNotThrow(() -> Rootfs.maskPaths(List.of("/proc/sysrq-trigger")));
         }
     }
@@ -112,10 +108,11 @@ class RootfsMaskAndReadonlyTest {
 
     @Test
     void readonlyRemountNullIsNoOp() {
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+        RecordingSyscalls rec = new RecordingSyscalls();
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.readonlyRemount(null);
-            lm.verifyNoInteractions();
         }
+        assertTrue(rec.mountCalls().isEmpty());
     }
 
     @Test
@@ -124,44 +121,38 @@ class RootfsMaskAndReadonlyTest {
         // remount won't affect the host, then a remount with MS_RDONLY added.
         // The kernel REQUIRES two calls — MS_RDONLY on a fresh bind is silently
         // dropped.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    isNull(), anyLong(), isNull())).thenReturn(0);
-
+        RecordingSyscalls rec = new RecordingSyscalls().stubMountReturn(0);
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.readonlyRemount(List.of("/proc/sys"));
-
-            // First call: self-bind.
-            lm.verify(() -> Libc.mount(any(Arena.class),
-                    eq("/proc/sys"), eq("/proc/sys"), isNull(),
-                    eq(Constants.MS_BIND | Constants.MS_REC), isNull()));
-            // Second call: remount with MS_RDONLY.
-            long expected = Constants.MS_BIND | Constants.MS_REC
-                    | Constants.MS_REMOUNT | Constants.MS_RDONLY;
-            lm.verify(() -> Libc.mount(any(Arena.class),
-                    eq("/proc/sys"), eq("/proc/sys"), isNull(),
-                    eq(expected), isNull()));
         }
+
+        List<MountCall> calls = rec.mountCalls();
+        assertEquals(2, calls.size());
+        // Call 1: self-bind, recursive.
+        assertEquals("/proc/sys", calls.get(0).source());
+        assertEquals("/proc/sys", calls.get(0).target());
+        assertEquals(Constants.MS_BIND | Constants.MS_REC, calls.get(0).flags());
+        // Call 2: remount with MS_RDONLY.
+        long expected = Constants.MS_BIND | Constants.MS_REC
+                | Constants.MS_REMOUNT | Constants.MS_RDONLY;
+        assertEquals(expected, calls.get(1).flags(),
+                "remount must include MS_REMOUNT|MS_RDONLY on top of MS_BIND|MS_REC");
     }
 
     @Test
     void readonlyRemountSkipsEnoentWithoutAttemptingRemount() {
         // ENOENT on the self-bind means the path isn't in this rootfs. Don't
         // try to remount what we didn't bind.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    isNull(), anyLong(), isNull())).thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(Constants.ENOENT);
-
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubMountReturn(-1)
+                .stubErrno(Constants.ENOENT);
+        try (var s = SyscallHost.install(rec)) {
             Rootfs.readonlyRemount(List.of("/not/here"));
-
-            // First call happened, second (remount) must NOT.
-            lm.verify(() -> Libc.mount(any(Arena.class),
-                    eq("/not/here"), eq("/not/here"), isNull(),
-                    eq(Constants.MS_BIND | Constants.MS_REC), isNull()));
-            long remountFlags = Constants.MS_BIND | Constants.MS_REC
-                    | Constants.MS_REMOUNT | Constants.MS_RDONLY;
-            lm.verify(() -> Libc.mount(any(Arena.class), anyString(), anyString(),
-                    isNull(), eq(remountFlags), isNull()), never());
         }
+
+        // Only ONE call: the failed self-bind. No remount.
+        assertEquals(1, rec.mountCalls().size());
+        assertEquals(Constants.MS_BIND | Constants.MS_REC,
+                rec.mountCalls().get(0).flags());
     }
 }

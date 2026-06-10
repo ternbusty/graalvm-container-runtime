@@ -3,7 +3,8 @@ package com.ternbusty.takoyaki.command;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
-import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.syscall.SyscallHost;
+import com.ternbusty.takoyaki.syscall.Syscalls;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
@@ -45,9 +46,10 @@ public final class KillCommand implements Callable<Integer> {
             Logger.error("invalid signal: " + signal);
             return 1;
         }
-        int rc = Libc.kill(state.pid, sig);
-        if (rc != 0 && Libc.errno() != Constants.ESRCH) {
-            Logger.error("kill failed: " + Libc.strerror(Libc.errno()));
+        Syscalls sc = SyscallHost.current();
+        int rc = sc.kill(state.pid, sig);
+        if (rc != 0 && sc.errno() != Constants.ESRCH) {
+            Logger.error("kill failed: " + sc.strerror(sc.errno()));
             return 1;
         }
         Logger.info("sent signal " + signal + " to pid " + state.pid);

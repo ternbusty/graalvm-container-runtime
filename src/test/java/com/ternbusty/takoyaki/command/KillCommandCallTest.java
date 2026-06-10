@@ -3,19 +3,23 @@ package com.ternbusty.takoyaki.command;
 import com.ternbusty.takoyaki.state.ContainerStatus;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
-import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls.KillCall;
+import com.ternbusty.takoyaki.syscall.SyscallHost;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Drives the full {@link KillCommand#call} method with {@code Libc} and
- * {@code State.load} stubbed out, so we exercise the actual control flow
- * (state load → status check → pid presence → signal parse → kill → ESRCH
- * tolerance) without touching the real OS.
+ * Drives the full {@link KillCommand#call} method with {@link State#load}
+ * mocked and kill(2) routed through the Syscalls trait fake. We exercise the
+ * actual control flow (state load -> status check -> pid presence -> signal
+ * parse -> kill -> ESRCH tolerance) without touching the real OS.
  */
 class KillCommandCallTest {
 
@@ -39,56 +43,61 @@ class KillCommandCallTest {
     }
 
     @Test
-    void killRunningContainerCallsLibcKillWithRightSignal() {
+    void killRunningContainerCallsKillWithRightSignal() {
         State st = spy(runningState(4242));
-        // refreshStatus should leave it RUNNING — return self unchanged.
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load("/run/takoyaki", "ctr-a")).thenReturn(st);
-            lm.when(() -> Libc.kill(4242, Constants.SIGTERM)).thenReturn(0);
 
             int rc = newCmd("ctr-a", "SIGTERM").call();
 
             assertEquals(0, rc);
-            lm.verify(() -> Libc.kill(4242, Constants.SIGTERM), times(1));
+            assertEquals(List.of(new KillCall(4242, Constants.SIGTERM)),
+                    rec.killCalls());
         }
     }
 
     @Test
-    void killOnStoppedContainerReturnsErrorWithoutCallingLibc() {
+    void killOnStoppedContainerReturnsErrorWithoutCallingKill() {
         State st = spy(runningState(4242));
         st.status = ContainerStatus.STOPPED.value;
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
             int rc = newCmd("ctr-a", "KILL").call();
 
             assertEquals(1, rc, "OCI spec: kill on stopped MUST error");
-            lm.verifyNoInteractions();
+            assertTrue(rec.killCalls().isEmpty(),
+                    "must not invoke kill(2) on stopped container");
         }
     }
 
     @Test
-    void esrchFromLibcIsTolerated() {
+    void esrchFromKernelIsTolerated() {
         // If the process died between refreshStatus and kill(2), the kernel
         // returns ESRCH. Per runc semantics we treat that as success.
         State st = spy(runningState(4242));
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubKillReturn(-1)
+                .stubErrno(Constants.ESRCH);
+
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
-            lm.when(() -> Libc.kill(anyInt(), anyInt())).thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(Constants.ESRCH);
 
             int rc = newCmd("ctr-a", "KILL").call();
 
             assertEquals(0, rc, "ESRCH from kill(2) must NOT propagate as a runtime error");
+            assertEquals(1, rec.killCalls().size());
         }
     }
 
@@ -97,12 +106,13 @@ class KillCommandCallTest {
         State st = spy(runningState(4242));
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubKillReturn(-1)
+                .stubErrno(1 /* EPERM */);
+
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
-            lm.when(() -> Libc.kill(anyInt(), anyInt())).thenReturn(-1);
-            lm.when(Libc::errno).thenReturn(1 /* EPERM */);
-            lm.when(() -> Libc.strerror(anyInt())).thenReturn("Operation not permitted");
 
             int rc = newCmd("ctr-a", "KILL").call();
 
@@ -115,14 +125,15 @@ class KillCommandCallTest {
         State st = spy(runningState(4242));
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
             int rc = newCmd("ctr-a", "TOTALLY_NOT_A_SIGNAL").call();
 
             assertEquals(1, rc);
-            lm.verifyNoInteractions();
+            assertTrue(rec.killCalls().isEmpty());
         }
     }
 
@@ -132,28 +143,30 @@ class KillCommandCallTest {
         st.pid = null;
         doReturn(st).when(st).refreshStatus();
 
+        RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
             int rc = newCmd("ctr-a", "KILL").call();
 
             assertEquals(1, rc);
-            lm.verifyNoInteractions();
+            assertTrue(rec.killCalls().isEmpty());
         }
     }
 
     @Test
     void stateLoadFailureReturnsErrorWithoutKill() {
+        RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<Libc> lm = mockStatic(Libc.class)) {
+             var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString()))
                     .thenThrow(new java.io.IOException("no state.json"));
 
             int rc = newCmd("ctr-a", "KILL").call();
 
             assertEquals(1, rc);
-            lm.verifyNoInteractions();
+            assertTrue(rec.killCalls().isEmpty());
         }
     }
 }

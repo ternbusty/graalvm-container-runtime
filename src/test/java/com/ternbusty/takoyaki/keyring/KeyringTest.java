@@ -1,59 +1,54 @@
 package com.ternbusty.takoyaki.keyring;
 
-import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.syscall.RecordingSyscalls;
+import com.ternbusty.takoyaki.syscall.SyscallHost;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Rewritten to drive the Syscalls trait fake. The previous version pinned the
+ * raw keyctl syscall number / command int directly via mockStatic(Libc.class).
+ * That logic now lives inside LinuxSyscalls. The fake intercepts at the
+ * semantic level — "did we ask to join a new session keyring?".
+ */
 class KeyringTest {
 
     @Test
-    void joinNewSessionInvokesKeyctlSyscall() {
-        // Verify the keyctl(2) syscall fires with KEYCTL_JOIN_SESSION_KEYRING
-        // (= 1) as the command. The exact NR number depends on architecture
-        // (aarch64=219, x86_64=250) so we don't pin it.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.syscall(anyLong(), anyLong(), anyLong(),
-                    anyLong(), anyLong(), anyLong())).thenReturn(42L);
-
+    void joinNewSessionInvokesKeyctlOnce() {
+        // Single call per joinNewSession invocation. No retry, no fan-out.
+        RecordingSyscalls rec = new RecordingSyscalls().stubKeyctlJoinReturn(42L);
+        try (var s = SyscallHost.install(rec)) {
             Keyring.joinNewSession("takoyaki-7");
-
-            lm.verify(() -> Libc.syscall(
-                    anyLong(),
-                    eq(1L /* KEYCTL_JOIN_SESSION_KEYRING */),
-                    anyLong(), eq(0L), eq(0L), eq(0L)));
         }
+        assertEquals(1, rec.keyctlJoinCalls().size());
+        assertEquals("takoyaki-7", rec.keyctlJoinCalls().get(0).name());
     }
 
     @Test
     void anonymousSessionPassesNullName() {
-        // name == null → arg = 0 (NULL ptr to the kernel, which means an
-        // anonymous new session keyring).
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.syscall(anyLong(), anyLong(), anyLong(),
-                    anyLong(), anyLong(), anyLong())).thenReturn(0L);
-
+        // name == null is "anonymous new session keyring" per kernel semantics.
+        // We must propagate the null, NOT substitute a default string.
+        RecordingSyscalls rec = new RecordingSyscalls().stubKeyctlJoinReturn(0L);
+        try (var s = SyscallHost.install(rec)) {
             Keyring.joinNewSession(null);
-
-            lm.verify(() -> Libc.syscall(
-                    anyLong(), eq(1L), eq(0L), eq(0L), eq(0L), eq(0L)));
         }
+        assertEquals(1, rec.keyctlJoinCalls().size());
+        assertNull(rec.keyctlJoinCalls().get(0).name(),
+                "null name must pass through as null");
     }
 
     @Test
-    void negativeSyscallReturnIsLoggedNotPropagated() {
+    void negativeReturnIsLoggedNotPropagated() {
         // EPERM from the kernel must surface as a debug log, not a thrown
-        // exception — the container should still come up.
-        try (MockedStatic<Libc> lm = mockStatic(Libc.class)) {
-            lm.when(() -> Libc.syscall(anyLong(), anyLong(), anyLong(),
-                    anyLong(), anyLong(), anyLong())).thenReturn(-1L);
-            lm.when(Libc::errno).thenReturn(1 /*EPERM*/);
-            lm.when(() -> Libc.strerror(anyInt())).thenReturn("Operation not permitted");
+        // exception. The container should still come up.
+        RecordingSyscalls rec = new RecordingSyscalls()
+                .stubKeyctlJoinReturn(-1L)
+                .stubErrno(1 /*EPERM*/);
 
+        try (var s = SyscallHost.install(rec)) {
             assertDoesNotThrow(() -> Keyring.joinNewSession("anything"));
         }
+        assertEquals(1, rec.keyctlJoinCalls().size());
     }
 }

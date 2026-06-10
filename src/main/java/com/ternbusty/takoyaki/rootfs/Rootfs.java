@@ -5,6 +5,8 @@ import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.syscall.Constants;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
+import com.ternbusty.takoyaki.syscall.SyscallHost;
+import com.ternbusty.takoyaki.syscall.Syscalls;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -407,22 +409,21 @@ public final class Rootfs {
      */
     public static void maskPaths(List<String> paths) {
         if (paths == null) return;
-        try (Arena arena = Arena.ofConfined()) {
-            for (String p : paths) {
-                int rc = Libc.mount(arena, "/dev/null", p, null, Constants.MS_BIND, null);
-                if (rc == 0) {
-                    Logger.debug("masked " + p + " with /dev/null");
-                    continue;
-                }
-                int err = Libc.errno();
-                if (err == Constants.ENOENT) continue; // skip nonexistent
-                // Likely a directory — mask with tmpfs.
-                rc = Libc.mount(arena, "tmpfs", p, "tmpfs", Constants.MS_RDONLY, null);
-                if (rc != 0) {
-                    Logger.debug("mask " + p + " failed: " + Libc.strerror(Libc.errno()));
-                } else {
-                    Logger.debug("masked " + p + " with tmpfs");
-                }
+        Syscalls sc = SyscallHost.current();
+        for (String p : paths) {
+            int rc = sc.mount("/dev/null", p, null, Constants.MS_BIND, null);
+            if (rc == 0) {
+                Logger.debug("masked " + p + " with /dev/null");
+                continue;
+            }
+            int err = sc.errno();
+            if (err == Constants.ENOENT) continue; // skip nonexistent
+            // Likely a directory — mask with tmpfs.
+            rc = sc.mount("tmpfs", p, "tmpfs", Constants.MS_RDONLY, null);
+            if (rc != 0) {
+                Logger.debug("mask " + p + " failed: " + sc.strerror(sc.errno()));
+            } else {
+                Logger.debug("masked " + p + " with tmpfs");
             }
         }
     }
@@ -430,22 +431,21 @@ public final class Rootfs {
     /** Bind-remount each path read-only. Used for /proc/bus, /proc/sys etc. */
     public static void readonlyRemount(List<String> paths) {
         if (paths == null) return;
-        try (Arena arena = Arena.ofConfined()) {
-            for (String p : paths) {
-                // First bind it to itself so we can remount RO without affecting host.
-                if (Libc.mount(arena, p, p, null, Constants.MS_BIND | Constants.MS_REC, null) != 0) {
-                    int err = Libc.errno();
-                    if (err == Constants.ENOENT) continue;
-                    Logger.debug("rebind " + p + ": " + Libc.strerror(err));
-                    continue;
-                }
-                long flags = Constants.MS_BIND | Constants.MS_REC | Constants.MS_REMOUNT
-                        | Constants.MS_RDONLY;
-                if (Libc.mount(arena, p, p, null, flags, null) != 0) {
-                    Logger.debug("readonly remount " + p + ": " + Libc.strerror(Libc.errno()));
-                } else {
-                    Logger.debug("readonly " + p);
-                }
+        Syscalls sc = SyscallHost.current();
+        for (String p : paths) {
+            // First bind it to itself so we can remount RO without affecting host.
+            if (sc.mount(p, p, null, Constants.MS_BIND | Constants.MS_REC, null) != 0) {
+                int err = sc.errno();
+                if (err == Constants.ENOENT) continue;
+                Logger.debug("rebind " + p + ": " + sc.strerror(err));
+                continue;
+            }
+            long flags = Constants.MS_BIND | Constants.MS_REC | Constants.MS_REMOUNT
+                    | Constants.MS_RDONLY;
+            if (sc.mount(p, p, null, flags, null) != 0) {
+                Logger.debug("readonly remount " + p + ": " + sc.strerror(sc.errno()));
+            } else {
+                Logger.debug("readonly " + p);
             }
         }
     }
