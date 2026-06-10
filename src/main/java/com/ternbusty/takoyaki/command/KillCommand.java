@@ -56,8 +56,11 @@ public final class KillCommand implements Callable<Integer> {
 
     public static int parseSignal(String s) {
         try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
-        String n = s.startsWith("SIG") ? s : "SIG" + s;
-        return switch (n.toUpperCase()) {
+        // Normalize case BEFORE checking the SIG prefix; otherwise "sigterm"
+        // gets prefixed again to "SIGsigterm" and falls through to default.
+        String upper = s.toUpperCase();
+        String n = upper.startsWith("SIG") ? upper : "SIG" + upper;
+        return switch (n) {
             case "SIGHUP" -> Constants.SIGHUP;
             case "SIGINT" -> Constants.SIGINT;
             case "SIGQUIT" -> Constants.SIGQUIT;

@@ -32,6 +32,9 @@ jobs:
           java-version: '25'
           distribution: 'graalvm-community'
 
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
       - name: Build native takoyaki
         run: |
           ./gradlew nativeCompile --no-daemon --info
@@ -39,6 +42,13 @@ jobs:
           sudo cp build/native/nativeCompile/takoyaki /opt/takoyaki/bin
           sudo chmod +x /opt/takoyaki/bin
           /opt/takoyaki/bin --version
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: build/reports/tests/test/
 
       - name: Clone and build runtime-tools validation suite
         run: |

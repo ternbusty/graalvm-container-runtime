@@ -24,6 +24,10 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0")
     compileOnly("org.graalvm.sdk:nativeimage:25.0.2")
+
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {
@@ -42,6 +46,11 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.named<JavaExec>("run") {
     jvmArgs("--enable-native-access=ALL-UNNAMED", "--enable-preview")
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+    jvmArgs("--enable-preview", "--enable-native-access=ALL-UNNAMED")
 }
 
 val bootstrapDir = layout.projectDirectory.dir("src/main/c/bootstrap")
