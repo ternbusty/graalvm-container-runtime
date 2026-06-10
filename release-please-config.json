@@ -6,6 +6,7 @@
     "packages": {
         ".": {
             "release-type": "simple",
+            "release-as": "0.1.0",
             "extra-files": [
                 "build.gradle.kts"
             ]
