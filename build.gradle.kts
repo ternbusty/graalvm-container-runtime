@@ -25,7 +25,7 @@ dependencies {
     implementation("info.picocli:picocli:4.7.7")
     annotationProcessor("info.picocli:picocli-codegen:4.7.7")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.0")
     compileOnly("org.graalvm.sdk:nativeimage:25.0.2")
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
