@@ -101,6 +101,15 @@ public final class Seccomp {
                 return;
             }
             try {
+                // libseccomp defaults SCMP_FLTATR_CTL_NNP to 1, which makes
+                // seccomp_load() unconditionally call prctl(PR_SET_NO_NEW_PRIVS, 1).
+                // That breaks specs that set noNewPrivileges=false and would also
+                // mask cases where the runtime is supposed to be in charge of NNP.
+                // Disable libseccomp's auto-NNP — the runtime sets NNP earlier
+                // based on spec.process.noNewPrivileges.
+                int SCMP_FLTATR_CTL_NNP = 3;
+                SECCOMP_ATTR_SET.invoke(ctx, SCMP_FLTATR_CTL_NNP, 0L);
+
                 // architectures - libseccomp wants lowercase, no SCMP_ARCH_ prefix
                 if (sec.architectures != null) {
                     for (String archName : sec.architectures) {

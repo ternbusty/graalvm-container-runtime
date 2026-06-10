@@ -152,12 +152,46 @@ public final class InitProcess {
                 Libc.umask(spec.process.umask.intValue());
             }
 
+            // Order rationale (matches runc / youki):
+            //
+            //   1. AppArmor / SELinux label staging
+            //   2. PR_SET_NO_NEW_PRIVS (only if spec asks)
+            //   3. seccomp_load — done HERE (still with full caps inherited from
+            //      bootstrap) so the kernel doesn't auto-set NoNewPrivs as a
+            //      side-effect of seccomp() being called without CAP_SYS_ADMIN.
+            //      If we deferred this until after capability drop, a spec saying
+            //      noNewPrivileges=false with a non-empty seccomp profile would
+            //      always end up with NoNewPrivs=1 anyway, violating the spec.
+            //   4. Capability bounding set / keep_caps
+            //   5. setgroups / setresgid / setresuid
+            //   6. capset (final effective/permitted/inheritable/ambient)
+            //   7. PR_SET_DUMPABLE=0
+            //   8. execve into user process
+
+            if (spec.process != null && spec.process.apparmorProfile != null) {
+                AppArmor.apply(spec.process.apparmorProfile);
+            }
+            if (spec.process != null && spec.process.selinuxLabel != null) {
+                SeLinux.apply(spec.process.selinuxLabel);
+            }
+
             if (Boolean.TRUE.equals(spec.process != null ? spec.process.noNewPrivileges : null)) {
                 if (Libc.prctl(Constants.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
                     Logger.warn("PR_SET_NO_NEW_PRIVS failed");
                 } else {
                     Logger.debug("no_new_privileges set");
                 }
+            }
+
+            // Join a fresh kernel session keyring unless the caller opted out via
+            // --no-new-keyring (we propagate that via env var).
+            if (!"1".equals(System.getenv("_TAKOYAKI_NO_NEW_KEYRING"))) {
+                Keyring.joinNewSession("takoyaki-" + Libc.getpid());
+            }
+
+            if (spec.linux != null && spec.linux.seccomp != null) {
+                Seccomp.apply(spec.linux.seccomp,
+                        System.getenv("_TAKOYAKI_CONTAINER_ID"), bundlePath);
             }
 
             Spec.LinuxCapabilities caps = spec.process != null ? spec.process.capabilities : null;
@@ -191,27 +225,6 @@ public final class InitProcess {
             // Re-set non-dumpable so /proc inspection by attached processes can't leak.
             if (Libc.prctl(Constants.PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
                 Logger.debug("PR_SET_DUMPABLE,0 failed: " + Libc.strerror(Libc.errno()));
-            }
-
-            // AppArmor and SELinux labels must be staged BEFORE seccomp/execve. With
-            // no_new_privs the kernel rejects further label changes after exec(2), so
-            // this is the latest safe point to do it.
-            if (spec.process != null && spec.process.apparmorProfile != null) {
-                AppArmor.apply(spec.process.apparmorProfile);
-            }
-            if (spec.process != null && spec.process.selinuxLabel != null) {
-                SeLinux.apply(spec.process.selinuxLabel);
-            }
-
-            // Join a fresh kernel session keyring unless the caller opted out via
-            // --no-new-keyring (we propagate that via env var).
-            if (!"1".equals(System.getenv("_TAKOYAKI_NO_NEW_KEYRING"))) {
-                Keyring.joinNewSession("takoyaki-" + Libc.getpid());
-            }
-
-            if (spec.linux != null && spec.linux.seccomp != null) {
-                Seccomp.apply(spec.linux.seccomp,
-                        System.getenv("_TAKOYAKI_CONTAINER_ID"), bundlePath);
             }
 
             // PTY setup: if process.terminal is true and a console socket was passed,

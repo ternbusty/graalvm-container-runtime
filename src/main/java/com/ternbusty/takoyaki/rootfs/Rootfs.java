@@ -96,7 +96,16 @@ public final class Rootfs {
         Logger.debug("mounted /dev (tmpfs)");
         for (String d : DEVICES) bindDevice(arena, dev, d);
 
-        // /dev/shm
+        // OCI default mount order under /dev is pts → shm → mqueue; matching it
+        // makes runtime-tools' "found in order" check pass since the spec lists
+        // them in that order and the test scans /proc/self/mountinfo forward-only.
+        String pts = dev + "/pts";
+        try { Files.createDirectories(Path.of(pts)); } catch (IOException ignored) {}
+        if (Libc.mount(arena, "devpts", pts, "devpts",
+                Constants.MS_NOSUID | Constants.MS_NOEXEC, "newinstance,ptmxmode=0666,mode=0620") != 0) {
+            Logger.debug("mount /dev/pts: " + Libc.strerror(Libc.errno()));
+        }
+
         String shm = dev + "/shm";
         try { Files.createDirectories(Path.of(shm)); } catch (IOException ignored) {}
         if (Libc.mount(arena, "shm", shm, "tmpfs",
@@ -106,12 +115,48 @@ public final class Rootfs {
         } else {
             Logger.debug("mounted /dev/shm");
         }
-        // /dev/pts and /dev/ptmx
-        String pts = dev + "/pts";
-        try { Files.createDirectories(Path.of(pts)); } catch (IOException ignored) {}
-        if (Libc.mount(arena, "devpts", pts, "devpts",
-                Constants.MS_NOSUID | Constants.MS_NOEXEC, "newinstance,ptmxmode=0666,mode=0620") != 0) {
-            Logger.debug("mount /dev/pts: " + Libc.strerror(Libc.errno()));
+
+        // /dev/mqueue (OCI default mount). Required by runtime-tools default test.
+        String mqueue = dev + "/mqueue";
+        try { Files.createDirectories(Path.of(mqueue)); } catch (IOException ignored) {}
+        if (Libc.mount(arena, "mqueue", mqueue, "mqueue",
+                Constants.MS_NOSUID | Constants.MS_NODEV | Constants.MS_NOEXEC, null) != 0) {
+            Logger.debug("mount /dev/mqueue: " + Libc.strerror(Libc.errno()));
+        } else {
+            Logger.debug("mounted /dev/mqueue");
+        }
+
+        // OCI default symlinks under /dev that runtime-tools verifies.
+        try {
+            Path devPath = Path.of(dev);
+            // /dev/ptmx -> pts/ptmx
+            Path ptmx = devPath.resolve("ptmx");
+            if (!Files.exists(ptmx, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createSymbolicLink(ptmx, Path.of("pts/ptmx"));
+            }
+            // /dev/fd -> /proc/self/fd
+            Path fd = devPath.resolve("fd");
+            if (!Files.exists(fd, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createSymbolicLink(fd, Path.of("/proc/self/fd"));
+            }
+            // /dev/stdin -> /proc/self/fd/0
+            Path stdin = devPath.resolve("stdin");
+            if (!Files.exists(stdin, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createSymbolicLink(stdin, Path.of("/proc/self/fd/0"));
+            }
+            // /dev/stdout -> /proc/self/fd/1
+            Path stdout = devPath.resolve("stdout");
+            if (!Files.exists(stdout, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createSymbolicLink(stdout, Path.of("/proc/self/fd/1"));
+            }
+            // /dev/stderr -> /proc/self/fd/2
+            Path stderr = devPath.resolve("stderr");
+            if (!Files.exists(stderr, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createSymbolicLink(stderr, Path.of("/proc/self/fd/2"));
+            }
+            Logger.debug("created /dev default symlinks");
+        } catch (IOException e) {
+            Logger.debug("dev symlinks: " + e.getMessage());
         }
     }
 
