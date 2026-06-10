@@ -1,5 +1,8 @@
 # takoyaki
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![release](https://img.shields.io/github/v/release/ternbusty/takoyaki)](https://github.com/ternbusty/takoyaki/releases/latest)
+
 A GraalVM Native Image OCI container runtime, written in Java + Panama FFM. Implements the [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec).
 
 ## Install
@@ -78,5 +81,10 @@ Commit message format follows [Conventional Commits](https://www.conventionalcom
 
 - `feat: ...` triggers a minor bump
 - `fix: ...` triggers a patch bump
+- `perf: ...` and `deps: ...` trigger a patch bump
 - `feat!: ...` or `BREAKING CHANGE:` triggers a major bump
-- `chore: ...`, `docs: ...`, `refactor: ...`, etc. flow into the changelog without bumping unless they include a breaking change footer
+- `chore: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `ci: ...`, `build: ...`, `style: ...`, `revert: ...` are kept in git history but do not appear in the changelog and do not bump the version
+
+## License
+
+takoyaki is licensed under the [Apache License 2.0](LICENSE). See `NOTICE` for attributions.

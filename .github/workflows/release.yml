@@ -69,6 +69,7 @@ jobs:
         with:
           java-version: '25'
           distribution: 'graalvm-community'
+          cache: 'gradle'
 
       - name: Build native takoyaki
         run: ./gradlew nativeCompile --no-daemon
