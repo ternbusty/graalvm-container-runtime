@@ -1,6 +1,6 @@
 # takoyaki
 
-A GraalVM Native Image OCI container runtime. Runc-compatible CLI, written in Java + Panama FFM.
+A GraalVM Native Image OCI container runtime, written in Java + Panama FFM. Implements the [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec).
 
 ## Install
 
@@ -32,8 +32,6 @@ curl -sSL https://github.com/ternbusty/takoyaki/releases/latest/download/takoyak
 - cgroup v2 mounted at `/sys/fs/cgroup` (cgroup v1 is not supported)
 
 ## Usage
-
-takoyaki implements the OCI runtime CLI surface. The common commands map 1-to-1 with runc:
 
 ```sh
 takoyaki create   --bundle ./bundle  my-container
