@@ -1,0 +1,28 @@
+{
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "release-type": "simple",
+    "include-component-in-tag": false,
+    "include-v-in-tag": true,
+    "packages": {
+        ".": {
+            "release-type": "simple",
+            "extra-files": [
+                "build.gradle.kts"
+            ]
+        }
+    },
+    "changelog-sections": [
+        { "section": "🎉 Features",                  "type": "feat" },
+        { "section": "🐛 Bug Fixes",                 "type": "fix" },
+        { "section": "⚡ Performance Improvements",  "type": "perf" },
+        { "section": "🔗 Dependencies",              "type": "deps" },
+        { "section": "📝 Documentation",             "type": "docs" },
+        { "section": "🏗️ Build System",              "type": "build", "hidden": true },
+        { "section": "🤖 Continuous Integration",    "type": "ci",    "hidden": true },
+        { "section": "🔧 Miscellaneous Chores",      "type": "chore" },
+        { "section": "⏪ Reverts",                   "type": "revert", "hidden": true },
+        { "section": "✅ Tests",                    "type": "test",  "hidden": true },
+        { "section": "💄 Style",                    "type": "style", "hidden": true },
+        { "section": "♻️ Code Refactoring",          "type": "refactor" }
+    ]
+}

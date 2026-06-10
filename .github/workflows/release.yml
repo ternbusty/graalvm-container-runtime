@@ -1,0 +1,93 @@
+name: release
+
+# Release pipeline modelled on takehaya/xdperf:
+#   1. release-please opens (or updates) a "release PR" that bumps version.txt
+#      and CHANGELOG.md based on conventional-commits in the commit history.
+#   2. When that PR is merged, release-please tags vX.Y.Z and publishes a
+#      GitHub Release.
+#   3. The build job then native-image-builds takoyaki for linux/aarch64 and
+#      linux/x86_64 in parallel and uploads each binary + sha256 to the
+#      release as a downloadable asset.
+#
+# End-user install becomes:
+#   curl -sSL https://github.com/ternbusty/takoyaki/releases/latest/download/takoyaki-linux-aarch64 \
+#     -o /usr/local/bin/takoyaki
+#   chmod +x /usr/local/bin/takoyaki
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      releases_created: ${{ steps.release-please.outputs.releases_created }}
+      tag_name: ${{ steps.release-please.outputs.tag_name }}
+    steps:
+      - id: release-please
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+          - runner: ubuntu-24.04
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Install build dependencies
+        # libseccomp-dev for the link step (seccomp() filter installation).
+        # gcc is preinstalled on ubuntu runners; bootstrap.c needs it.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libseccomp-dev
+
+      - name: Install GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+
+      - name: Build native takoyaki
+        run: ./gradlew nativeCompile --no-daemon
+
+      - name: Stage binary + checksum
+        run: |
+          set -eux
+          mkdir -p dist
+          cp build/native/nativeCompile/takoyaki dist/takoyaki-linux-${{ matrix.arch }}
+          (cd dist && sha256sum takoyaki-linux-${{ matrix.arch }} \
+              > takoyaki-linux-${{ matrix.arch }}.sha256)
+          # Quick smoke check that the produced binary at least responds to --version.
+          dist/takoyaki-linux-${{ matrix.arch }} --version
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" \
+            dist/takoyaki-linux-${{ matrix.arch }} \
+            dist/takoyaki-linux-${{ matrix.arch }}.sha256 \
+            --clobber
