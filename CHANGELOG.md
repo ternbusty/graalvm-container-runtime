@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.2](https://github.com/ternbusty/takoyaki/compare/v0.1.1...v0.1.2) (2026-06-11)
+
+
+### ⚡ Performance Improvements
+
+* add run subcommand that does create + start + wait + delete in one process ([#18](https://github.com/ternbusty/takoyaki/issues/18)) ([26e9638](https://github.com/ternbusty/takoyaki/commit/26e963894365153b624bcaee6c64ef81d78753f6))
+* cold start optimizations (-12 ms TOTAL, -34% --version) ([6842e0f](https://github.com/ternbusty/takoyaki/commit/6842e0fdba6246d11bf842dfc0739a1f3c4c647d))
+* replace jackson-databind with a hand-rolled JSON codec ([#16](https://github.com/ternbusty/takoyaki/issues/16)) ([483f25a](https://github.com/ternbusty/takoyaki/commit/483f25aae1e13c0ab0c176036fd1c52ae27cd847))
+* trim glibc locale init and drop picocli ([#15](https://github.com/ternbusty/takoyaki/issues/15)) ([faa0af3](https://github.com/ternbusty/takoyaki/commit/faa0af36d7e3238607075337327c3375ac10612a))
+
 ## [0.1.1](https://github.com/ternbusty/takoyaki/compare/v0.1.0...v0.1.1) (2026-06-11)
 
 
