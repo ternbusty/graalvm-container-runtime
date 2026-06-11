@@ -9,6 +9,7 @@ import com.ternbusty.takoyaki.command.ListCommand;
 import com.ternbusty.takoyaki.command.PauseCommand;
 import com.ternbusty.takoyaki.command.PsCommand;
 import com.ternbusty.takoyaki.command.ResumeCommand;
+import com.ternbusty.takoyaki.command.RunCommand;
 import com.ternbusty.takoyaki.command.StartCommand;
 import com.ternbusty.takoyaki.command.StateCommand;
 import com.ternbusty.takoyaki.command.UpdateCommand;
@@ -124,6 +125,7 @@ public final class Main {
             case "delete" -> dispatchDelete(args, subStart, rootPath);
             case "ps" -> dispatchPs(args, subStart, rootPath);
             case "create" -> dispatchCreate(args, subStart, rootPath, debug);
+            case "run" -> dispatchRun(args, subStart, rootPath, debug);
             case "update" -> dispatchUpdate(args, subStart, rootPath);
             case "events" -> dispatchEvents(args, subStart, rootPath);
             case "exec" -> dispatchExec(args, subStart, rootPath);
@@ -301,6 +303,65 @@ public final class Main {
         }
         return CreateCommand.run(rootPath, debug, id, bundle, pidFile, consoleSocket,
                 noPivot, noNewKeyring, preserveFds);
+    }
+
+    private static int dispatchRun(String[] args, int subStart, String rootPath, boolean debug) {
+        // takoyaki run [-b BUNDLE] [-d|--detach] [--pid-file P]
+        //              [--console-socket S] [--no-pivot] [--no-new-keyring]
+        //              [--preserve-fds N] <id>
+        //
+        // Same args as create except --detach. Without --detach we wait for
+        // the container init to exit and then delete the state.
+        String bundle = ".";
+        String pidFile = null;
+        String consoleSocket = null;
+        boolean noPivot = false;
+        boolean noNewKeyring = false;
+        int preserveFds = 0;
+        boolean detach = false;
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "-b", "--bundle" -> {
+                    if (i + 1 >= args.length) return missingArg("run", a);
+                    bundle = args[++i];
+                }
+                case "-d", "--detach" -> detach = true;
+                case "--pid-file" -> {
+                    if (i + 1 >= args.length) return missingArg("run", a);
+                    pidFile = args[++i];
+                }
+                case "--console-socket" -> {
+                    if (i + 1 >= args.length) return missingArg("run", a);
+                    consoleSocket = args[++i];
+                }
+                case "--no-pivot" -> noPivot = true;
+                case "--no-new-keyring" -> noNewKeyring = true;
+                case "--preserve-fds" -> {
+                    if (i + 1 >= args.length) return missingArg("run", a);
+                    try { preserveFds = Integer.parseInt(args[++i]); }
+                    catch (NumberFormatException e) {
+                        System.err.println("takoyaki run: --preserve-fds requires an integer");
+                        return 1;
+                    }
+                }
+                default -> {
+                    if (a.charAt(0) != '-' && id == null) {
+                        id = a;
+                    } else {
+                        System.err.println("takoyaki run: unexpected arg: " + a);
+                        return 1;
+                    }
+                }
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki run: missing container ID");
+            return 1;
+        }
+        return RunCommand.run(rootPath, debug, id, bundle, pidFile, consoleSocket,
+                noPivot, noNewKeyring, preserveFds, detach);
     }
 
     private static int dispatchUpdate(String[] args, int subStart, String rootPath) {
@@ -489,6 +550,7 @@ public final class Main {
 
                 Subcommands:
                   create               Create a new container
+                  run                  Create + start + wait + delete in one process
                   start                Start a created container
                   state                Display container state
                   kill                 Send a signal to a container
@@ -506,6 +568,7 @@ public final class Main {
     private static void printSubcommandHelp(String sub) {
         String body = switch (sub) {
             case "create" -> "Usage: takoyaki create [-b BUNDLE] [--pid-file P] [--console-socket S] [--no-pivot] [--no-new-keyring] [--preserve-fds N] <id>";
+            case "run" -> "Usage: takoyaki run [-b BUNDLE] [-d|--detach] [--pid-file P] [--console-socket S] [--no-pivot] [--no-new-keyring] [--preserve-fds N] <id>";
             case "start" -> "Usage: takoyaki start <id>";
             case "state" -> "Usage: takoyaki state <id>";
             case "kill" -> "Usage: takoyaki kill <id> [SIGNAL]";

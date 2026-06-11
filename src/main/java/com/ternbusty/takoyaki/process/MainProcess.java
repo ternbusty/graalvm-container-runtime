@@ -123,7 +123,11 @@ public final class MainProcess {
             }
 
             Logger.info("container " + containerId + " created with init pid " + stage2Pid);
-            System.exit(0);
+            // Historically this called System.exit(0). That broke RunCommand,
+            // which needs to keep the JVM alive after create to call start +
+            // waitpid + delete in the same process. Returning normally lets the
+            // caller decide whether to exit (CreateCommand top-level) or
+            // continue (RunCommand foreground path).
         } catch (Exception e) {
             Logger.error("main proc failed: " + e.getMessage());
             e.printStackTrace(System.err);
