@@ -1,6 +1,6 @@
 package com.ternbusty.takoyaki.contest;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ternbusty.takoyaki.util.json.JsonWriter;
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,7 +103,7 @@ public final class Contest {
         Files.createDirectories(bundle);
         Files.createDirectories(bundle.resolve("rootfs"));
         Path config = bundle.resolve("config.json");
-        Files.writeString(config, new ObjectMapper().writeValueAsString(spec));
+        Files.writeString(config, JsonWriter.toPretty(spec));
         return bundle;
     }
 

@@ -51,7 +51,7 @@ public final class Hooks {
     private static void runEach(List<Spec.Hook> hooks, State state, String phase,
                                 boolean failFast) {
         if (hooks == null || hooks.isEmpty()) return;
-        String stateJson = Json.encode(state);
+        String stateJson = Json.encode(state.toJson());
         for (Spec.Hook h : hooks) {
             if (h.path == null) continue;
             List<String> cmd = new ArrayList<>();

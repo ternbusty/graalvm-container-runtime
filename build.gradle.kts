@@ -24,10 +24,11 @@ java {
 
 dependencies {
     // No CLI parsing framework — Main.java hand-parses argv. picocli's
-    // reflection-driven CommandSpec build cost ~80 ms on aarch64 native-image,
-    // which dominated takoyaki's per-invocation wall time.
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.0")
+    // reflection-driven CommandSpec build cost ~80 ms on aarch64 native-image.
+    // No JSON library — util.json hand-parses into a Map/List tree and the
+    // Spec / State / KontainerConfig beans codec to/from it. jackson-databind
+    // pulled in ~3,000 reachable methods and transitively ~4.6 MB of java.xml
+    // at native-image build time, all for our small OCI schemas.
     compileOnly("org.graalvm.sdk:nativeimage:25.0.2")
 
     testImplementation(platform("org.junit:junit-bom:6.1.0"))

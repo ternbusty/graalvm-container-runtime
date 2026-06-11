@@ -10,7 +10,7 @@ public final class StateCommand {
     public static int run(String rootPath, String containerId) {
         try {
             State s = State.load(rootPath, containerId).refreshStatus();
-            System.out.println(Json.encode(s));
+            System.out.println(Json.encode(s.toJson()));
             return 0;
         } catch (Exception e) {
             Logger.error("failed to load state: " + e.getMessage());

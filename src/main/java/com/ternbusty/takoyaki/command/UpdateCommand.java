@@ -31,7 +31,7 @@ public final class UpdateCommand {
         if (resourcesPath != null) {
             try {
                 Spec.LinuxResources parsed = Json.readFile(Path.of(resourcesPath),
-                        Spec.LinuxResources.class);
+                        Spec.LinuxResources::fromJson);
                 r = parsed;
             } catch (Exception e) {
                 Logger.error("failed to read resources file: " + e.getMessage());

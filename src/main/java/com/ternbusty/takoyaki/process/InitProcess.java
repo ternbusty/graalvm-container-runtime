@@ -87,7 +87,7 @@ public final class InitProcess {
 
         Spec spec;
         try {
-            spec = Json.readFile(Path.of(bundlePath, "config.json"), Spec.class);
+            spec = Json.readFile(Path.of(bundlePath, "config.json"), Spec::fromJson);
         } catch (Exception e) {
             Logger.error("failed to load spec: " + e.getMessage());
             PosixIO._exit(1);
