@@ -149,6 +149,16 @@ class CgroupsTest {
         // After delete, the cgroup MUST be reaped. Stale cgroups
         // are a long-running OOM-killer leak source for orchestrators
         // that don't reap them themselves.
+        //
+        // Tiny poll: cgroup tear-down has an unavoidable async tail in the
+        // kernel (cgroup_destroy_locked schedules work). Even after takoyaki
+        // returns successfully, the directory entry can survive ~10-50 ms on
+        // fast hosts. Wait up to 2 seconds for it to disappear before
+        // declaring a leak.
+        long deadline = System.nanoTime() + 2_000_000_000L;
+        while (System.nanoTime() < deadline && Files.exists(cgDir)) {
+            Thread.sleep(50);
+        }
         assertFalse(Files.exists(cgDir),
                 () -> "cgroup directory " + cgDir + " leaked after delete. "
                         + "delete stderr: " + delete.stderr());

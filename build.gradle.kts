@@ -90,6 +90,12 @@ val contestTest by tasks.registering(Test::class) {
     include("com/ternbusty/takoyaki/contest/**")
     // Propagate the binary path to the test JVM so the harness can find it.
     System.getenv("TAKOYAKI_BIN")?.let { environment("TAKOYAKI_BIN", it) }
+    // Hard ceiling on the whole task. The contest suite has ~30 scenarios
+    // each shelling out to the native binary; a hung container init would
+    // otherwise consume the full GitHub Actions job timeout. 15 min covers
+    // the full run with healthy headroom (VM measures ~21 min total but
+    // CI hardware is faster).
+    timeout.set(java.time.Duration.ofMinutes(15))
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
