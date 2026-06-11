@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.1](https://github.com/ternbusty/takoyaki/compare/v0.1.0...v0.1.1) (2026-06-11)
+
+
+### 🎉 Features
+
+* **hooks,kill:** make prestart hook failure abort create; parse kill signal first ([777afc8](https://github.com/ternbusty/takoyaki/commit/777afc817508c80bb2f7b33b5b1e96354b91320a))
+
+
+### 🐛 Bug Fixes
+
+* **build:** import java.time.Duration in build.gradle.kts ([f3612d5](https://github.com/ternbusty/takoyaki/commit/f3612d53760282ef101726602760dc22bbb5c2ac))
+* **cgroup:** retry rmdir until it succeeds; CI was still racing teardown ([0da7bcf](https://github.com/ternbusty/takoyaki/commit/0da7bcfcd0f01f6d3144111892900b8cae2eee61))
+* **cgroup:** use cgroup.kill + procs poll to avoid rmdir EBUSY race ([a11d2cc](https://github.com/ternbusty/takoyaki/commit/a11d2cced9108d9fa811f82f4432e4be239e65da))
+* **create,start:** move process.args validation from create to start ([54e1f96](https://github.com/ternbusty/takoyaki/commit/54e1f9673937bf0941b83e4265eefa1897434b36))
+* **start:** revert process.args validation; runtime-tools wants no error ([2bb9ae2](https://github.com/ternbusty/takoyaki/commit/2bb9ae2376d84560391a193d7923d3ed58f2d0f3))
+
+
+### 🔗 Dependencies
+
+* **deps:** bump com.fasterxml.jackson.datatype:jackson-datatype-jdk8 ([#10](https://github.com/ternbusty/takoyaki/issues/10)) ([9033ed2](https://github.com/ternbusty/takoyaki/commit/9033ed2436eb7700530e775d5bb325c63e24d933))
+* **deps:** bump jackson-databind from 2.19.0 to 2.22.0 ([bdb2e02](https://github.com/ternbusty/takoyaki/commit/bdb2e02d42c76f9a672e977f7a61aefe4d96f41b))
+* **deps:** bump org.junit:junit-bom from 5.11.4 to 6.1.0 ([#9](https://github.com/ternbusty/takoyaki/issues/9)) ([2e972ef](https://github.com/ternbusty/takoyaki/commit/2e972ef7d74218dc15935b2e53ac3442455768e1))
+* **deps:** bump org.mockito:mockito-core from 5.20.0 to 5.23.0 ([#7](https://github.com/ternbusty/takoyaki/issues/7)) ([bb0d607](https://github.com/ternbusty/takoyaki/commit/bb0d607edcb1c192624a9bc31f50c5a8af23b1d4))
+* **deps:** bump org.mockito:mockito-junit-jupiter from 5.20.0 to 5.23.0 ([#8](https://github.com/ternbusty/takoyaki/issues/8)) ([8f4af60](https://github.com/ternbusty/takoyaki/commit/8f4af60afecb8a936817600904cddef49d1e1848))
+
 ## 0.1.0 (2026-06-10)
 
 
