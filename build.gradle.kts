@@ -135,6 +135,7 @@ graalvmNative {
             quickBuild = isQuick
             buildArgs.addAll(
                 "--no-fallback",
+                "-O3",
                 "-H:+UnlockExperimentalVMOptions",
                 "-H:+ForeignAPISupport",
                 "-H:NativeLinkerOption=${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a",
@@ -144,6 +145,14 @@ graalvmNative {
                 "--features=com.ternbusty.takoyaki.nativeimage.ForeignFeature",
                 "--enable-native-access=ALL-UNNAMED",
                 "--enable-preview",
+                "--initialize-at-build-time=com.ternbusty.takoyaki.command",
+                "--initialize-at-build-time=com.ternbusty.takoyaki.spec",
+                "--initialize-at-build-time=com.ternbusty.takoyaki.state",
+                "--initialize-at-build-time=com.ternbusty.takoyaki.logger",
+                "--initialize-at-build-time=com.ternbusty.takoyaki.util",
+                "--initialize-at-build-time=picocli",
+                "--initialize-at-run-time=com.ternbusty.takoyaki.util.Json",
+                "--initialize-at-run-time=com.ternbusty.takoyaki.command.Wait",
             )
         }
     }

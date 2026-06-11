@@ -7,21 +7,10 @@ import picocli.CommandLine.Option;
         name = "takoyaki",
         mixinStandardHelpOptions = true,
         version = "takoyaki 0.1.0",
-        description = "GraalVM-based low-level container runtime (runc compatible)",
-        subcommands = {
-                CreateCommand.class,
-                StartCommand.class,
-                StateCommand.class,
-                KillCommand.class,
-                DeleteCommand.class,
-                ListCommand.class,
-                PsCommand.class,
-                PauseCommand.class,
-                ResumeCommand.class,
-                UpdateCommand.class,
-                EventsCommand.class,
-                ExecCommand.class,
-        }
+        description = "GraalVM-based low-level container runtime (runc compatible)"
+        // Optimization 4: subcommands are added dynamically in Main.main()
+        // based on argv[0]. This avoids picocli's eager reflection over all
+        // 12 subcommand classes when only one is invoked.
 )
 public final class TakoyakiRoot {
     @Option(names = "--root", description = "Root directory for container state",
