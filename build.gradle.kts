@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import java.time.Duration
 
 plugins {
     application
@@ -95,7 +96,7 @@ val contestTest by tasks.registering(Test::class) {
     // otherwise consume the full GitHub Actions job timeout. 15 min covers
     // the full run with healthy headroom (VM measures ~21 min total but
     // CI hardware is faster).
-    timeout.set(java.time.Duration.ofMinutes(15))
+    timeout.set(Duration.ofMinutes(15))
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
