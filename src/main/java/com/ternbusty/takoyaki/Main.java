@@ -3,7 +3,6 @@ package com.ternbusty.takoyaki;
 import com.ternbusty.takoyaki.command.TakoyakiRoot;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.process.InitProcess;
-import com.ternbusty.takoyaki.syscall.Bootstrap;
 import picocli.CommandLine;
 
 public final class Main {
@@ -15,8 +14,11 @@ public final class Main {
         boolean trace = "1".equals(System.getenv("_TAKOYAKI_TRACE_STARTUP"));
         long t0 = trace ? System.nanoTime() : 0;
 
-        boolean stage2 = Bootstrap.isInitProcess()
-                || (args.length == 1 && "__init__".equals(args[0]));
+        // Stage-2 (post-bootstrap re-exec) is detected via the sentinel argv
+        // we set when re-execing /proc/self/exe in bootstrap.c. (There used
+        // to be a parallel C-side flag exposed via FFM, but it was always
+        // 0 and the symbol wasn't dynamically findable in stripped PIEs.)
+        boolean stage2 = args.length == 1 && "__init__".equals(args[0]);
         if (stage2) {
             if ("1".equals(System.getenv("_TAKOYAKI_BOOTSTRAP_DEBUG"))) {
                 Logger.setLevel(Logger.Level.DEBUG);

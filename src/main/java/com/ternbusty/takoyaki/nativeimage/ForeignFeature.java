@@ -10,7 +10,7 @@ public final class ForeignFeature implements Feature {
 
     @Override
     public void duringSetup(DuringSetupAccess access) {
-        // Register all downcall signatures we use in PosixIO + Libc + Bootstrap.
+        // Register all downcall signatures we use in PosixIO + Libc + seccomp + ipc.
 
         // int->int
         reg(FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
