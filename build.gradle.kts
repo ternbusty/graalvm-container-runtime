@@ -184,6 +184,7 @@ graalvmNative {
                 "-H:NativeLinkerOption=-Wl,--whole-archive,${bootstrapBuildDir.get().asFile.absolutePath}/libbootstrap.a,--no-whole-archive",
                 seccompLinkerOpt,
                 "--features=com.ternbusty.takoyaki.nativeimage.ForeignFeature",
+                "--features=com.ternbusty.takoyaki.nativeimage.NoFsFeature",
                 "--enable-native-access=ALL-UNNAMED",
                 "--enable-preview",
                 // Build-time-initialize most of takoyaki. Classes that have
