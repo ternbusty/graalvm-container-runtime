@@ -195,6 +195,17 @@ public final class Contest {
      * for "after start, state must reflect running" assertions where the
      * state machine takes a tick or two to settle.
      */
+    /**
+     * Best-effort cleanup hook. Swallows all errors. Use in test {@code finally}
+     * blocks so an assertion failure mid-test doesn't leak a running container
+     * (which leaves a {@code takoyaki __init__} process holding the binary
+     * file open and blocking the next {@code nativeCompile}).
+     */
+    public static void forceCleanup(Path rootDir, String id) {
+        try { run(rootDir, "kill", id, "KILL"); } catch (Exception ignored) {}
+        try { run(rootDir, "delete", "--force", id); } catch (Exception ignored) {}
+    }
+
     public static boolean waitForStatus(Path rootDir, String id, String expected,
                                         long timeoutMs) throws IOException, InterruptedException {
         long deadline = System.nanoTime() + timeoutMs * 1_000_000L;

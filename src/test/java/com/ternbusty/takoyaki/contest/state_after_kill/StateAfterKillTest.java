@@ -49,23 +49,25 @@ class StateAfterKillTest {
         ));
 
         String id = Contest.newContainerId();
-        assertEquals(0, Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id).rc());
-        assertEquals(0, Contest.run(rootDir, "start", id).rc());
-        assertTrue(Contest.waitForStatus(rootDir, id, "running", 2000),
-                "container never reached running");
+        try {
+            assertEquals(0, Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id).rc());
+            assertEquals(0, Contest.run(rootDir, "start", id).rc());
+            assertTrue(Contest.waitForStatus(rootDir, id, "running", 2000),
+                    "container never reached running");
 
-        CmdResult kill = Contest.run(rootDir, "kill", id, "KILL");
-        assertEquals(0, kill.rc(), () -> "kill failed: " + kill.stderr());
+            CmdResult kill = Contest.run(rootDir, "kill", id, "KILL");
+            assertEquals(0, kill.rc(), () -> "kill failed: " + kill.stderr());
 
-        // SIGKILL is immediate, but state refresh involves a kill(pid, 0)
-        // probe — give it 2 seconds to settle.
-        boolean stopped = Contest.waitForStatus(rootDir, id, "stopped", 2000);
-        assertTrue(stopped,
-                () -> "state never reached 'stopped' after SIGKILL. Last state: "
-                        + tryReadState(rootDir, id));
-
-        Contest.run(rootDir, "delete", "--force", id);
+            // SIGKILL is immediate, but state refresh involves a kill(pid, 0)
+            // probe — give it 2 seconds to settle.
+            boolean stopped = Contest.waitForStatus(rootDir, id, "stopped", 2000);
+            assertTrue(stopped,
+                    () -> "state never reached 'stopped' after SIGKILL. Last state: "
+                            + tryReadState(rootDir, id));
+        } finally {
+            Contest.forceCleanup(rootDir, id);
+        }
     }
 
     private static String tryReadState(Path rootDir, String id) {

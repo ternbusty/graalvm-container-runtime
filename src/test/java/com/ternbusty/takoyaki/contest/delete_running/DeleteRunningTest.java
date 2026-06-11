@@ -35,21 +35,26 @@ class DeleteRunningTest {
         Contest.writeBundle(bundle, longRunningSpec());
 
         String id = Contest.newContainerId();
-        assertEquals(0, Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id).rc());
-        assertEquals(0, Contest.run(rootDir, "start", id).rc());
-        assertTrue(Contest.waitForStatus(rootDir, id, "running", 2000));
+        try {
+            assertEquals(0, Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id).rc());
+            assertEquals(0, Contest.run(rootDir, "start", id).rc());
+            assertTrue(Contest.waitForStatus(rootDir, id, "running", 2000));
 
-        CmdResult delete = Contest.run(rootDir, "delete", id);
-        assertNotEquals(0, delete.rc(),
-                () -> "delete WITHOUT --force on a running container must fail. "
-                        + "stderr=<" + delete.stderr() + ">");
+            CmdResult delete = Contest.run(rootDir, "delete", id);
+            assertNotEquals(0, delete.rc(),
+                    () -> "delete WITHOUT --force on a running container must fail. "
+                            + "stderr=<" + delete.stderr() + ">");
 
-        // Cleanup: --force must still work to get rid of it.
-        CmdResult forced = Contest.run(rootDir, "delete", "--force", id);
-        assertEquals(0, forced.rc(),
-                () -> "delete --force must succeed on running container. "
-                        + "stderr=<" + forced.stderr() + ">");
+            // Within-test cleanup. We still wrap with forceCleanup in finally
+            // for the paths where this delete --force itself fails.
+            CmdResult forced = Contest.run(rootDir, "delete", "--force", id);
+            assertEquals(0, forced.rc(),
+                    () -> "delete --force must succeed on running container. "
+                            + "stderr=<" + forced.stderr() + ">");
+        } finally {
+            Contest.forceCleanup(rootDir, id);
+        }
     }
 
     private static Map<String, Object> longRunningSpec() {

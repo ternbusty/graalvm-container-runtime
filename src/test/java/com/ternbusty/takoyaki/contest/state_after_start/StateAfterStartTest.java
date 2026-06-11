@@ -55,22 +55,23 @@ class StateAfterStartTest {
         ));
 
         String id = Contest.newContainerId();
-        CmdResult create = Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id);
-        assertEquals(0, create.rc(), () -> "create failed: " + create.stderr());
+        try {
+            CmdResult create = Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id);
+            assertEquals(0, create.rc(), () -> "create failed: " + create.stderr());
 
-        CmdResult start = Contest.run(rootDir, "start", id);
-        assertEquals(0, start.rc(), () -> "start failed: " + start.stderr());
+            CmdResult start = Contest.run(rootDir, "start", id);
+            assertEquals(0, start.rc(), () -> "start failed: " + start.stderr());
 
-        // State takes a tick to flip from created -> running. 2-second budget
-        // is generous (sleep is well-warm by 50 ms in practice).
-        boolean reachedRunning = Contest.waitForStatus(rootDir, id, "running", 2000);
-        assertTrue(reachedRunning,
-                () -> "state never reflected 'running'. Last state: "
-                        + tryReadState(rootDir, id));
-
-        Contest.run(rootDir, "kill", id, "KILL");
-        Contest.run(rootDir, "delete", "--force", id);
+            // State takes a tick to flip from created -> running. 2-second budget
+            // is generous (sleep is well-warm by 50 ms in practice).
+            boolean reachedRunning = Contest.waitForStatus(rootDir, id, "running", 2000);
+            assertTrue(reachedRunning,
+                    () -> "state never reflected 'running'. Last state: "
+                            + tryReadState(rootDir, id));
+        } finally {
+            Contest.forceCleanup(rootDir, id);
+        }
     }
 
     private static String tryReadState(Path rootDir, String id) {

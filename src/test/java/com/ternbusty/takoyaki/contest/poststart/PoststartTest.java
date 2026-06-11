@@ -59,27 +59,28 @@ class PoststartTest {
         ));
 
         String id = Contest.newContainerId();
-        assertEquals(0, Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id).rc());
+        try {
+            assertEquals(0, Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id).rc());
 
-        // Marker must NOT exist before start — poststart is start-time, not create-time.
-        assertFalse(Files.exists(marker),
-                () -> "poststart fired during create — wrong phase. marker=" + marker);
+            // Marker must NOT exist before start — poststart is start-time, not create-time.
+            assertFalse(Files.exists(marker),
+                    () -> "poststart fired during create — wrong phase. marker=" + marker);
 
-        CmdResult start = Contest.run(rootDir, "start", id);
-        assertEquals(0, start.rc(), () -> "start failed: " + start.stderr());
+            CmdResult start = Contest.run(rootDir, "start", id);
+            assertEquals(0, start.rc(), () -> "start failed: " + start.stderr());
 
-        // Give the hook a moment to run; we don't wait on start's process
-        // synchronously for hooks.
-        long deadline = System.nanoTime() + 2_000_000_000L;
-        while (System.nanoTime() < deadline && !Files.exists(marker)) {
-            Thread.sleep(50);
+            // Give the hook a moment to run; we don't wait on start's process
+            // synchronously for hooks.
+            long deadline = System.nanoTime() + 2_000_000_000L;
+            while (System.nanoTime() < deadline && !Files.exists(marker)) {
+                Thread.sleep(50);
+            }
+            assertTrue(Files.exists(marker),
+                    () -> "poststart hook never fired (marker " + marker + " absent). "
+                            + "start stderr: " + start.stderr());
+        } finally {
+            Contest.forceCleanup(rootDir, id);
         }
-        assertTrue(Files.exists(marker),
-                () -> "poststart hook never fired (marker " + marker + " absent). "
-                        + "start stderr: " + start.stderr());
-
-        Contest.run(rootDir, "kill", id, "KILL");
-        Contest.run(rootDir, "delete", "--force", id);
     }
 }

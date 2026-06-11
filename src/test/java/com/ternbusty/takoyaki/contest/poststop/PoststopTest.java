@@ -60,22 +60,27 @@ class PoststopTest {
         ));
 
         String id = Contest.newContainerId();
-        assertEquals(0, Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id).rc());
+        try {
+            assertEquals(0, Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id).rc());
 
-        // Marker must NOT exist before delete.
-        assertFalse(Files.exists(marker));
+            // Marker must NOT exist before delete.
+            assertFalse(Files.exists(marker));
 
-        // Delete the (still-created, not-started) container with --force.
-        // Even without a started workload, delete still triggers poststop
-        // per OCI semantics.
-        Contest.run(rootDir, "delete", "--force", id);
+            // Delete the (still-created, not-started) container with --force.
+            // Even without a started workload, delete still triggers poststop
+            // per OCI semantics.
+            Contest.run(rootDir, "delete", "--force", id);
 
-        long deadline = System.nanoTime() + 2_000_000_000L;
-        while (System.nanoTime() < deadline && !Files.exists(marker)) {
-            Thread.sleep(50);
+            long deadline = System.nanoTime() + 2_000_000_000L;
+            while (System.nanoTime() < deadline && !Files.exists(marker)) {
+                Thread.sleep(50);
+            }
+            assertTrue(Files.exists(marker),
+                    () -> "poststop hook never fired (marker " + marker + " absent)");
+        } finally {
+            // Best-effort cleanup for the failure paths (e.g. delete itself errored).
+            Contest.forceCleanup(rootDir, id);
         }
-        assertTrue(Files.exists(marker),
-                () -> "poststop hook never fired (marker " + marker + " absent)");
     }
 }
