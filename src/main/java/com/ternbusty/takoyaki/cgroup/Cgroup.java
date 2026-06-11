@@ -129,6 +129,37 @@ public final class Cgroup {
         if (cgroupPath == null) return;
         String norm = cgroupPath.startsWith("/") ? cgroupPath.substring(1) : cgroupPath;
         Path full = Path.of(CGROUP_ROOT, norm);
+        if (!Files.exists(full)) return;
+
+        // cgroup v2: writing "1" to cgroup.kill atomically sends SIGKILL to
+        // every process in this cgroup and waits for them to be reaped.
+        // Available since Linux 5.14. Best-effort — older kernels don't have
+        // the file, in which case we just fall through to the polling loop
+        // below and rely on whatever earlier SIGKILL the delete path sent.
+        try {
+            Files.writeString(full.resolve("cgroup.kill"), "1");
+        } catch (IOException ignored) {}
+
+        // rmdir(2) on a cgroup v2 directory returns EBUSY ("Device or resource
+        // busy") if cgroup.procs still has any entry, including a zombie that
+        // hasn't yet been reaped by the kernel. Poll until cgroup.procs goes
+        // empty or we hit a generous timeout. CI runners are fast enough to
+        // race this without the loop (see contest CgroupsTest.cgroupDirectoryIsRemovedAfterDelete).
+        long deadlineNs = System.nanoTime() + 5_000_000_000L;
+        Path procs = full.resolve("cgroup.procs");
+        while (System.nanoTime() < deadlineNs) {
+            try {
+                if (Files.readString(procs).isBlank()) break;
+            } catch (IOException e) {
+                break; // file vanished -> cgroup gone already
+            }
+            try { Thread.sleep(20); }
+            catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
         try {
             if (Files.exists(full)) {
                 Files.delete(full);
