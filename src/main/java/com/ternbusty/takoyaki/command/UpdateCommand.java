@@ -5,44 +5,19 @@ import com.ternbusty.takoyaki.config.KontainerConfig;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.util.Json;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
 
-@Command(name = "update", description = "Update container resources")
-public final class UpdateCommand implements Callable<Integer> {
-    @ParentCommand TakoyakiRoot root;
+public final class UpdateCommand {
+    private UpdateCommand() {}
 
-    @Option(names = {"-r", "--resources"}, description = "Path to a JSON file with new resources")
-    String resourcesPath;
-
-    @Option(names = "--memory", description = "Memory limit in bytes")
-    Long memory;
-
-    @Option(names = "--cpu-quota", description = "CPU CFS quota in microseconds")
-    Long cpuQuota;
-
-    @Option(names = "--cpu-period", description = "CPU CFS period in microseconds")
-    Long cpuPeriod;
-
-    @Option(names = "--cpu-shares", description = "CPU shares (weight)")
-    Long cpuShares;
-
-    @Option(names = "--pids-limit", description = "Maximum number of pids")
-    Long pidsLimit;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId,
+                          String resourcesPath, Long memory,
+                          Long cpuQuota, Long cpuPeriod, Long cpuShares,
+                          Long pidsLimit) {
         String cgroupPath;
         try {
-            cgroupPath = KontainerConfig.load(root.rootPath, containerId).cgroupPath;
+            cgroupPath = KontainerConfig.load(rootPath, containerId).cgroupPath;
         } catch (Exception e) {
             Logger.error("no kontainer config: " + e.getMessage());
             return 1;

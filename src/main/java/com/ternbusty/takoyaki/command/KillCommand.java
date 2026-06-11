@@ -5,26 +5,11 @@ import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
 import com.ternbusty.takoyaki.syscall.SyscallHost;
 import com.ternbusty.takoyaki.syscall.Syscalls;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
-import java.util.concurrent.Callable;
+public final class KillCommand {
+    private KillCommand() {}
 
-@Command(name = "kill", description = "Send a signal to a container")
-public final class KillCommand implements Callable<Integer> {
-    @ParentCommand
-    TakoyakiRoot root;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Parameters(index = "1", arity = "0..1", description = "Signal name or number",
-            defaultValue = "SIGTERM")
-    String signal;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId, String signal) {
         // Parse the signal BEFORE loading state — signal parsing is cheap
         // and a typo on the signal name is the most user-fixable error here.
         // Reporting "invalid signal" first beats reporting "no such container"
@@ -38,7 +23,7 @@ public final class KillCommand implements Callable<Integer> {
         }
         State state;
         try {
-            state = State.load(root.rootPath, containerId).refreshStatus();
+            state = State.load(rootPath, containerId).refreshStatus();
         } catch (Exception e) {
             Logger.error("failed to load state: " + e.getMessage());
             return 1;

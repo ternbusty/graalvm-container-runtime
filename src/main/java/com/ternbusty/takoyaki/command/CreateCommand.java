@@ -10,47 +10,19 @@ import com.ternbusty.takoyaki.syscall.Constants;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 import com.ternbusty.takoyaki.util.Json;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.lang.foreign.Arena;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
-@Command(name = "create", description = "Create a new container")
-public final class CreateCommand implements Callable<Integer> {
-    @ParentCommand
-    TakoyakiRoot root;
+public final class CreateCommand {
+    private CreateCommand() {}
 
-    @Option(names = {"-b", "--bundle"}, defaultValue = ".", description = "Bundle path")
-    String bundle;
-
-    @Option(names = {"--pid-file"}, description = "PID file path")
-    String pidFile;
-
-    @Option(names = {"--console-socket"}, description = "Console socket (accepted, not used)")
-    String consoleSocket;
-
-    @Option(names = {"--no-pivot"}, description = "Use chroot instead of pivot_root (accepted)")
-    boolean noPivot;
-
-    @Option(names = {"--no-new-keyring"}, description = "Do not create a new keyring (accepted)")
-    boolean noNewKeyring;
-
-    @Option(names = {"--preserve-fds"}, defaultValue = "0", description = "Preserve additional FDs")
-    int preserveFds;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Override
-    public Integer call() {
-        String rootPath = root.rootPath;
+    public static int run(String rootPath, boolean debug, String containerId,
+                          String bundleIn, String pidFile, String consoleSocket,
+                          boolean noPivot, boolean noNewKeyring, int preserveFds) {
         if (State.exists(rootPath, containerId)) {
             Logger.error("container " + containerId + " already exists");
             return 1;
@@ -58,8 +30,9 @@ public final class CreateCommand implements Callable<Integer> {
 
         // Resolve bundle to an absolute path so later commands (start/delete) can
         // re-open config.json regardless of their cwd.
+        String bundle;
         try {
-            bundle = Path.of(bundle).toAbsolutePath().normalize().toString();
+            bundle = Path.of(bundleIn).toAbsolutePath().normalize().toString();
         } catch (Exception e) {
             Logger.error("invalid bundle path: " + e.getMessage());
             return 1;
@@ -137,7 +110,7 @@ public final class CreateCommand implements Callable<Integer> {
         envList.add("_TAKOYAKI_BUNDLE_PATH=" + bundle);
         envList.add("_TAKOYAKI_ROOTFS_PATH=" + rootfsPath);
         envList.add("_TAKOYAKI_CONTAINER_ID=" + containerId);
-        if (root.debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
+        if (debug) envList.add("_TAKOYAKI_BOOTSTRAP_DEBUG=1");
         if (consoleSocket != null) envList.add("_TAKOYAKI_CONSOLE_SOCKET=" + consoleSocket);
         if (noNewKeyring) envList.add("_TAKOYAKI_NO_NEW_KEYRING=1");
 

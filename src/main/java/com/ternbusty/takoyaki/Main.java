@@ -1,25 +1,47 @@
 package com.ternbusty.takoyaki;
 
-import com.ternbusty.takoyaki.command.TakoyakiRoot;
+import com.ternbusty.takoyaki.command.CreateCommand;
+import com.ternbusty.takoyaki.command.DeleteCommand;
+import com.ternbusty.takoyaki.command.EventsCommand;
+import com.ternbusty.takoyaki.command.ExecCommand;
+import com.ternbusty.takoyaki.command.KillCommand;
+import com.ternbusty.takoyaki.command.ListCommand;
+import com.ternbusty.takoyaki.command.PauseCommand;
+import com.ternbusty.takoyaki.command.PsCommand;
+import com.ternbusty.takoyaki.command.ResumeCommand;
+import com.ternbusty.takoyaki.command.StartCommand;
+import com.ternbusty.takoyaki.command.StateCommand;
+import com.ternbusty.takoyaki.command.UpdateCommand;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.process.InitProcess;
-import picocli.CommandLine;
 
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * takoyaki CLI entry point — a hand-rolled argv dispatcher with no picocli.
+ *
+ * <p>Why no framework: picocli's {@code new CommandLine(rootCmd)} +
+ * {@code execute()} cost ~80 ms on aarch64 native-image due to reflection-
+ * over-annotations at every invocation. takoyaki runs as short-lived
+ * orchestrator-invoked processes (~150 ms wall) where that's a 50 %+ tax.
+ *
+ * <p>The argv grammar is intentionally simple and runc-compatible:
+ * {@code takoyaki [root-opts...] SUBCOMMAND [sub-args...]}.
+ */
 public final class Main {
+    private static final String VERSION_STRING = "takoyaki 0.1.1";
+
     public static void main(String[] args) {
-        // Startup tracing. Set _TAKOYAKI_TRACE_STARTUP=1 to dump per-phase
-        // wall-clock breakdown to stderr. We capture each timestamp with
-        // System.nanoTime() (monotonic, ~10 ns resolution) and print at the
-        // end so the print itself doesn't perturb measurements.
         boolean trace = "1".equals(System.getenv("_TAKOYAKI_TRACE_STARTUP"));
+        // Capture monotonic time AS EARLY AS POSSIBLE. We print all trace
+        // lines together at the end of main() so warm-up of PrintStream /
+        // Charset / Locale doesn't steal from the very first measurement.
         long t0 = trace ? System.nanoTime() : 0;
 
         // Stage-2 (post-bootstrap re-exec) is detected via the sentinel argv
-        // we set when re-execing /proc/self/exe in bootstrap.c. (There used
-        // to be a parallel C-side flag exposed via FFM, but it was always
-        // 0 and the symbol wasn't dynamically findable in stripped PIEs.)
-        boolean stage2 = args.length == 1 && "__init__".equals(args[0]);
-        if (stage2) {
+        // we set when re-execing /proc/self/exe in bootstrap.c.
+        if (args.length == 1 && "__init__".equals(args[0])) {
             if ("1".equals(System.getenv("_TAKOYAKI_BOOTSTRAP_DEBUG"))) {
                 Logger.setLevel(Logger.Level.DEBUG);
             }
@@ -27,115 +49,476 @@ public final class Main {
             return;
         }
 
-        // Optimization 3: short-circuit --version before picocli runs to
-        // avoid the ~50 ms CommandSpec build cost for a string print.
+        // Single-arg --version is the hottest probe orchestrators issue. Cut
+        // straight to the print to avoid even the small dispatch overhead.
+        // Trace mode falls through so we can still measure the dispatch cost.
         if (args.length == 1 && "--version".equals(args[0]) && !trace) {
-            System.out.println("takoyaki 0.1.1");
+            System.out.println(VERSION_STRING);
             System.exit(0);
         }
-        long t1 = trace ? System.nanoTime() : 0;
 
+        // Single pass over argv: apply root-level options (which Logger and
+        // env-passing care about) and find where the subcommand starts.
+        String rootPath = "/run/takoyaki";
+        boolean debug = false;
+        String subName = null;
+        int subStart = -1;
         for (int i = 0; i < args.length; i++) {
-            if ("--debug".equals(args[i])) {
-                Logger.setLevel(Logger.Level.DEBUG);
-            } else if ("--log".equals(args[i]) && i + 1 < args.length) {
-                Logger.setLogFile(args[i + 1]);
-            } else if ("--log-format".equals(args[i]) && i + 1 < args.length) {
-                if ("json".equalsIgnoreCase(args[i + 1])) {
-                    Logger.setFormat(Logger.Format.JSON);
+            String a = args[i];
+            if (a.isEmpty() || a.charAt(0) != '-') {
+                subName = a;
+                subStart = i + 1;
+                break;
+            }
+            switch (a) {
+                case "-h", "--help" -> { printRootHelp(); System.exit(0); }
+                case "-v", "--version" -> { System.out.println(VERSION_STRING); System.exit(0); }
+                case "--debug" -> { debug = true; Logger.setLevel(Logger.Level.DEBUG); }
+                case "--root" -> { if (i + 1 < args.length) rootPath = args[++i]; }
+                case "--log" -> { if (i + 1 < args.length) Logger.setLogFile(args[++i]); }
+                case "--log-format" -> {
+                    if (i + 1 < args.length && "json".equalsIgnoreCase(args[++i])) {
+                        Logger.setFormat(Logger.Format.JSON);
+                    }
+                }
+                case "--systemd-cgroup" -> { /* runc compat: accepted, no-op */ }
+                case "--rootless", "--criu" -> { if (i + 1 < args.length) i++; }
+                default -> {
+                    System.err.println("takoyaki: unknown option: " + a);
+                    System.exit(1);
                 }
             }
         }
-        long t2 = trace ? System.nanoTime() : 0;
 
-        TakoyakiRoot rootCmd = new TakoyakiRoot();
-        long t3 = trace ? System.nanoTime() : 0;
+        if (subName == null) {
+            printRootHelp();
+            System.exit(0);
+        }
 
-        CommandLine cmd = new CommandLine(rootCmd);
-        // Optimization 4: only register the subcommand we actually need.
-        // This avoids picocli reflecting over all 12 subcommand classes when
-        // only one runs per invocation.
-        registerSubcommand(cmd, args);
-        long t4 = trace ? System.nanoTime() : 0;
-
-        cmd.setUnmatchedArgumentsAllowed(false);
-        long t5 = trace ? System.nanoTime() : 0;
-
-        int exitCode = cmd.execute(args);
-        long t6 = trace ? System.nanoTime() : 0;
+        int exitCode = dispatch(subName, args, subStart, rootPath, debug);
 
         if (trace) {
-            // Print to stderr so it doesn't pollute --version stdout etc.
-            // Each delta is microseconds for readability at the sub-ms scale.
-            java.io.PrintStream err = System.err;
-            err.printf("[trace] T01 stage2 check          : %7.3f ms%n", (t1 - t0) / 1e6);
-            err.printf("[trace] T12 arg pre-parse loop    : %7.3f ms%n", (t2 - t1) / 1e6);
-            err.printf("[trace] T23 new TakoyakiRoot()    : %7.3f ms%n", (t3 - t2) / 1e6);
-            err.printf("[trace] T34 new CommandLine(root) : %7.3f ms%n", (t4 - t3) / 1e6);
-            err.printf("[trace] T45 setUnmatchedArgs(false): %7.3f ms%n", (t5 - t4) / 1e6);
-            err.printf("[trace] T56 cmd.execute(args)     : %7.3f ms%n", (t6 - t5) / 1e6);
-            err.printf("[trace] TOTAL (main entry -> done): %7.3f ms%n", (t6 - t0) / 1e6);
+            long t6 = System.nanoTime();
+            System.err.printf("[trace] MAIN raw monotonic ns     : %d%n", t0);
+            System.err.printf("[trace] TOTAL (main entry -> done): %7.3f ms%n", (t6 - t0) / 1e6);
         }
         System.exit(exitCode);
     }
 
-    /**
-     * Look at argv to find the requested subcommand name and add ONLY that
-     * one to the CommandLine. Falls back to registering all subcommands for
-     * --help, unknown commands, and bash-completion paths so user-facing
-     * behavior is unchanged.
-     */
-    private static void registerSubcommand(CommandLine cmd, String[] args) {
-        String subName = null;
-        for (int i = 0; i < args.length; i++) {
+    private static int dispatch(String subName, String[] args, int subStart,
+                                String rootPath, boolean debug) {
+        // Per-subcommand --help short-circuit. Each command's help is a tiny
+        // canned string; we don't try to render the runc help layout exactly.
+        if (subStart < args.length
+                && ("-h".equals(args[subStart]) || "--help".equals(args[subStart]))) {
+            printSubcommandHelp(subName);
+            return 0;
+        }
+        return switch (subName) {
+            case "state" -> dispatchState(args, subStart, rootPath);
+            case "list", "ls" -> dispatchList(args, subStart, rootPath);
+            case "kill" -> dispatchKill(args, subStart, rootPath);
+            case "start" -> dispatchStart(args, subStart, rootPath);
+            case "pause" -> dispatchPause(args, subStart, rootPath);
+            case "resume" -> dispatchResume(args, subStart, rootPath);
+            case "delete" -> dispatchDelete(args, subStart, rootPath);
+            case "ps" -> dispatchPs(args, subStart, rootPath);
+            case "create" -> dispatchCreate(args, subStart, rootPath, debug);
+            case "update" -> dispatchUpdate(args, subStart, rootPath);
+            case "events" -> dispatchEvents(args, subStart, rootPath);
+            case "exec" -> dispatchExec(args, subStart, rootPath);
+            default -> {
+                System.err.println("takoyaki: unknown command: " + subName);
+                yield 1;
+            }
+        };
+    }
+
+    // ---- per-subcommand argv parsing & dispatch -----------------------
+
+    private static int dispatchState(String[] args, int subStart, String rootPath) {
+        // takoyaki state <id>
+        if (subStart >= args.length) {
+            System.err.println("takoyaki state: missing container ID");
+            return 1;
+        }
+        return StateCommand.run(rootPath, args[subStart]);
+    }
+
+    private static int dispatchList(String[] args, int subStart, String rootPath) {
+        // takoyaki list [-f|--format json|table] [-q|--quiet]
+        String format = "table";
+        boolean quiet = false;
+        for (int i = subStart; i < args.length; i++) {
             String a = args[i];
-            if (a.startsWith("-")) {
-                // Skip flags and their values for the known --root, --debug,
-                // --log, --log-format, --systemd-cgroup, --rootless, --criu options
-                if ("--root".equals(a) || "--log".equals(a) || "--log-format".equals(a)
-                        || "--rootless".equals(a) || "--criu".equals(a)) {
-                    i++;
+            if ("-f".equals(a) || "--format".equals(a)) {
+                if (i + 1 >= args.length) {
+                    System.err.println("takoyaki list: --format requires a value");
+                    return 1;
                 }
+                format = args[++i];
+            } else if ("-q".equals(a) || "--quiet".equals(a)) {
+                quiet = true;
+            } else {
+                System.err.println("takoyaki list: unexpected arg: " + a);
+                return 1;
+            }
+        }
+        return ListCommand.run(rootPath, format, quiet);
+    }
+
+    private static int dispatchKill(String[] args, int subStart, String rootPath) {
+        // takoyaki kill <id> [signal]
+        if (subStart >= args.length) {
+            System.err.println("takoyaki kill: missing container ID");
+            return 1;
+        }
+        String id = args[subStart];
+        String sig = subStart + 1 < args.length ? args[subStart + 1] : "SIGTERM";
+        return KillCommand.run(rootPath, id, sig);
+    }
+
+    private static int dispatchStart(String[] args, int subStart, String rootPath) {
+        if (subStart >= args.length) {
+            System.err.println("takoyaki start: missing container ID");
+            return 1;
+        }
+        return StartCommand.run(rootPath, args[subStart]);
+    }
+
+    private static int dispatchPause(String[] args, int subStart, String rootPath) {
+        if (subStart >= args.length) {
+            System.err.println("takoyaki pause: missing container ID");
+            return 1;
+        }
+        return PauseCommand.run(rootPath, args[subStart]);
+    }
+
+    private static int dispatchResume(String[] args, int subStart, String rootPath) {
+        if (subStart >= args.length) {
+            System.err.println("takoyaki resume: missing container ID");
+            return 1;
+        }
+        return ResumeCommand.run(rootPath, args[subStart]);
+    }
+
+    private static int dispatchDelete(String[] args, int subStart, String rootPath) {
+        // takoyaki delete [-f|--force] <id>
+        boolean force = false;
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            if ("-f".equals(a) || "--force".equals(a)) {
+                force = true;
+            } else if (a.charAt(0) != '-' && id == null) {
+                id = a;
+            } else {
+                System.err.println("takoyaki delete: unexpected arg: " + a);
+                return 1;
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki delete: missing container ID");
+            return 1;
+        }
+        return DeleteCommand.run(rootPath, id, force);
+    }
+
+    private static int dispatchPs(String[] args, int subStart, String rootPath) {
+        // takoyaki ps [-f|--format] <id>
+        String format = "table";
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            if ("-f".equals(a) || "--format".equals(a)) {
+                if (i + 1 >= args.length) {
+                    System.err.println("takoyaki ps: --format requires a value");
+                    return 1;
+                }
+                format = args[++i];
+            } else if (a.charAt(0) != '-' && id == null) {
+                id = a;
+            } else {
+                System.err.println("takoyaki ps: unexpected arg: " + a);
+                return 1;
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki ps: missing container ID");
+            return 1;
+        }
+        return PsCommand.run(rootPath, id, format);
+    }
+
+    private static int dispatchCreate(String[] args, int subStart, String rootPath, boolean debug) {
+        // takoyaki create [-b BUNDLE] [--pid-file P] [--console-socket S]
+        //                 [--no-pivot] [--no-new-keyring] [--preserve-fds N] <id>
+        String bundle = ".";
+        String pidFile = null;
+        String consoleSocket = null;
+        boolean noPivot = false;
+        boolean noNewKeyring = false;
+        int preserveFds = 0;
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "-b", "--bundle" -> {
+                    if (i + 1 >= args.length) return missingArg("create", a);
+                    bundle = args[++i];
+                }
+                case "--pid-file" -> {
+                    if (i + 1 >= args.length) return missingArg("create", a);
+                    pidFile = args[++i];
+                }
+                case "--console-socket" -> {
+                    if (i + 1 >= args.length) return missingArg("create", a);
+                    consoleSocket = args[++i];
+                }
+                case "--no-pivot" -> noPivot = true;
+                case "--no-new-keyring" -> noNewKeyring = true;
+                case "--preserve-fds" -> {
+                    if (i + 1 >= args.length) return missingArg("create", a);
+                    try { preserveFds = Integer.parseInt(args[++i]); }
+                    catch (NumberFormatException e) {
+                        System.err.println("takoyaki create: --preserve-fds requires an integer");
+                        return 1;
+                    }
+                }
+                default -> {
+                    if (a.charAt(0) != '-' && id == null) {
+                        id = a;
+                    } else {
+                        System.err.println("takoyaki create: unexpected arg: " + a);
+                        return 1;
+                    }
+                }
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki create: missing container ID");
+            return 1;
+        }
+        return CreateCommand.run(rootPath, debug, id, bundle, pidFile, consoleSocket,
+                noPivot, noNewKeyring, preserveFds);
+    }
+
+    private static int dispatchUpdate(String[] args, int subStart, String rootPath) {
+        // takoyaki update [-r FILE] [--memory N] [--cpu-quota N] [--cpu-period N]
+        //                 [--cpu-shares N] [--pids-limit N] <id>
+        String resourcesPath = null;
+        Long memory = null;
+        Long cpuQuota = null;
+        Long cpuPeriod = null;
+        Long cpuShares = null;
+        Long pidsLimit = null;
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "-r", "--resources" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    resourcesPath = args[++i];
+                }
+                case "--memory" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    memory = parseLongOrFail("update", a, args[++i]);
+                    if (memory == null) return 1;
+                }
+                case "--cpu-quota" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    cpuQuota = parseLongOrFail("update", a, args[++i]);
+                    if (cpuQuota == null) return 1;
+                }
+                case "--cpu-period" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    cpuPeriod = parseLongOrFail("update", a, args[++i]);
+                    if (cpuPeriod == null) return 1;
+                }
+                case "--cpu-shares" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    cpuShares = parseLongOrFail("update", a, args[++i]);
+                    if (cpuShares == null) return 1;
+                }
+                case "--pids-limit" -> {
+                    if (i + 1 >= args.length) return missingArg("update", a);
+                    pidsLimit = parseLongOrFail("update", a, args[++i]);
+                    if (pidsLimit == null) return 1;
+                }
+                default -> {
+                    if (a.charAt(0) != '-' && id == null) {
+                        id = a;
+                    } else {
+                        System.err.println("takoyaki update: unexpected arg: " + a);
+                        return 1;
+                    }
+                }
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki update: missing container ID");
+            return 1;
+        }
+        return UpdateCommand.run(rootPath, id, resourcesPath, memory,
+                cpuQuota, cpuPeriod, cpuShares, pidsLimit);
+    }
+
+    private static int dispatchEvents(String[] args, int subStart, String rootPath) {
+        // takoyaki events [--stats] [--interval SEC] <id>
+        boolean once = false;
+        int intervalSec = 5;
+        String id = null;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "--stats" -> once = true;
+                case "--interval" -> {
+                    if (i + 1 >= args.length) return missingArg("events", a);
+                    try { intervalSec = Integer.parseInt(args[++i]); }
+                    catch (NumberFormatException e) {
+                        System.err.println("takoyaki events: --interval requires an integer");
+                        return 1;
+                    }
+                }
+                default -> {
+                    if (a.charAt(0) != '-' && id == null) {
+                        id = a;
+                    } else {
+                        System.err.println("takoyaki events: unexpected arg: " + a);
+                        return 1;
+                    }
+                }
+            }
+        }
+        if (id == null) {
+            System.err.println("takoyaki events: missing container ID");
+            return 1;
+        }
+        return EventsCommand.run(rootPath, id, once, intervalSec);
+    }
+
+    private static int dispatchExec(String[] args, int subStart, String rootPath) {
+        // takoyaki exec [-u UID[:GID]] [-t] [--cwd DIR] [-e KEY=VAL]... <id> [--] CMD [ARG...]
+        // We treat the first non-flag positional as the container ID and
+        // everything after it (or after a literal "--") as the command + args.
+        String user = null;
+        String cwd = null;
+        List<String> envs = new ArrayList<>();
+        String id = null;
+        List<String> command = new ArrayList<>();
+        boolean afterPositional = false;
+        for (int i = subStart; i < args.length; i++) {
+            String a = args[i];
+            if (afterPositional) {
+                command.add(a);
                 continue;
             }
-            subName = a;
-            break;
+            if ("--".equals(a)) {
+                afterPositional = true;
+                continue;
+            }
+            switch (a) {
+                case "-u", "--user" -> {
+                    if (i + 1 >= args.length) return missingArg("exec", a);
+                    user = args[++i];
+                }
+                case "-t", "--tty" -> { /* runc compat: accepted, no-op */ }
+                case "--cwd" -> {
+                    if (i + 1 >= args.length) return missingArg("exec", a);
+                    cwd = args[++i];
+                }
+                case "-e", "--env" -> {
+                    if (i + 1 >= args.length) return missingArg("exec", a);
+                    envs.add(args[++i]);
+                }
+                default -> {
+                    if (a.charAt(0) != '-' && id == null) {
+                        id = a;
+                        afterPositional = true; // everything after = the command
+                    } else {
+                        System.err.println("takoyaki exec: unexpected arg: " + a);
+                        return 1;
+                    }
+                }
+            }
         }
-
-        if (subName == null) {
-            registerAllSubcommands(cmd);
-            return;
+        if (id == null) {
+            System.err.println("takoyaki exec: missing container ID");
+            return 1;
         }
+        if (command.isEmpty()) {
+            System.err.println("takoyaki exec: no command specified");
+            return 1;
+        }
+        return ExecCommand.run(rootPath, id, user, cwd, envs, command);
+    }
 
-        switch (subName) {
-            case "create" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.CreateCommand());
-            case "start"  -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.StartCommand());
-            case "state"  -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.StateCommand());
-            case "kill"   -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.KillCommand());
-            case "delete" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.DeleteCommand());
-            case "list", "ls" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.ListCommand());
-            case "ps"     -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.PsCommand());
-            case "pause"  -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.PauseCommand());
-            case "resume" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.ResumeCommand());
-            case "update" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.UpdateCommand());
-            case "events" -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.EventsCommand());
-            case "exec"   -> cmd.addSubcommand(new com.ternbusty.takoyaki.command.ExecCommand());
-            default -> registerAllSubcommands(cmd);
+    // ---- small helpers ------------------------------------------------
+
+    private static int missingArg(String sub, String opt) {
+        System.err.println("takoyaki " + sub + ": " + opt + " requires a value");
+        return 1;
+    }
+
+    private static Long parseLongOrFail(String sub, String opt, String value) {
+        try { return Long.parseLong(value); }
+        catch (NumberFormatException e) {
+            System.err.println("takoyaki " + sub + ": " + opt + " requires an integer, got: " + value);
+            return null;
         }
     }
 
-    private static void registerAllSubcommands(CommandLine cmd) {
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.CreateCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.StartCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.StateCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.KillCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.DeleteCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.ListCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.PsCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.PauseCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.ResumeCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.UpdateCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.EventsCommand());
-        cmd.addSubcommand(new com.ternbusty.takoyaki.command.ExecCommand());
+    // ---- help text ----------------------------------------------------
+
+    private static void printRootHelp() {
+        // Intentionally terse — runc / youki ship far more text but our
+        // surface is small and this fits a single screen.
+        System.out.println("""
+                Usage: takoyaki [root-opts] SUBCOMMAND [args...]
+
+                Root options:
+                  --root PATH          State directory (default /run/takoyaki)
+                  --debug              Enable debug logging
+                  --log PATH           Log file path
+                  --log-format FORMAT  text|json
+                  --systemd-cgroup     (accepted, no-op)
+                  --rootless VAL       (accepted)
+                  --criu PATH          (accepted)
+                  -v, --version        Print version
+                  -h, --help           Print this help
+
+                Subcommands:
+                  create               Create a new container
+                  start                Start a created container
+                  state                Display container state
+                  kill                 Send a signal to a container
+                  delete               Delete a container
+                  list, ls             List containers
+                  ps                   List processes in a container
+                  pause                Pause a container
+                  resume               Resume a paused container
+                  update               Update container resources
+                  events               Stream container stats
+                  exec                 Run a command in a running container
+                """);
+    }
+
+    private static void printSubcommandHelp(String sub) {
+        String body = switch (sub) {
+            case "create" -> "Usage: takoyaki create [-b BUNDLE] [--pid-file P] [--console-socket S] [--no-pivot] [--no-new-keyring] [--preserve-fds N] <id>";
+            case "start" -> "Usage: takoyaki start <id>";
+            case "state" -> "Usage: takoyaki state <id>";
+            case "kill" -> "Usage: takoyaki kill <id> [SIGNAL]";
+            case "delete" -> "Usage: takoyaki delete [-f|--force] <id>";
+            case "list", "ls" -> "Usage: takoyaki list [-f table|json] [-q|--quiet]";
+            case "ps" -> "Usage: takoyaki ps [-f table|json] <id>";
+            case "pause" -> "Usage: takoyaki pause <id>";
+            case "resume" -> "Usage: takoyaki resume <id>";
+            case "update" -> "Usage: takoyaki update [-r FILE] [--memory N] [--cpu-quota N] [--cpu-period N] [--cpu-shares N] [--pids-limit N] <id>";
+            case "events" -> "Usage: takoyaki events [--stats] [--interval SEC] <id>";
+            case "exec" -> "Usage: takoyaki exec [-u UID[:GID]] [-t] [--cwd DIR] [-e KEY=VAL]... <id> CMD [ARG...]";
+            default -> "Usage: takoyaki " + sub;
+        };
+        System.out.println(body);
     }
 }

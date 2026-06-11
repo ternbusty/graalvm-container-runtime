@@ -32,22 +32,13 @@ class ListCommandTest {
         System.setOut(realStdout);
     }
 
-    private ListCommand newCmd(String rootPath, String format, boolean quiet) {
-        ListCommand c = new ListCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = rootPath;
-        c.format = format;
-        c.quiet = quiet;
-        return c;
-    }
-
     @Test
     void emptyRootDirectoryPrintsEmptyJsonInJsonMode(@TempDir Path tmp) {
         // No containers saved yet. The runtime-tools list adapter expects
         // a JSON array for empty, not absent output. Json.encode may emit
         // either "[]" or "[ ]" depending on pretty-printer setup, so accept
         // either as long as it parses to an empty array.
-        int rc = newCmd(tmp.toString(), "json", false).call();
+        int rc = ListCommand.run(tmp.toString(), "json", false);
         assertEquals(0, rc);
         String out = captured.toString().trim();
         assertTrue(out.equals("[]") || out.equals("[ ]"),
@@ -58,7 +49,7 @@ class ListCommandTest {
     void missingRootDirectoryAlsoPrintsEmptyJson() {
         // No /run/takoyaki at all (first invocation, before any create) — still
         // a valid "no containers" answer. Must NOT return non-zero.
-        int rc = newCmd("/this/does/not/exist", "json", false).call();
+        int rc = ListCommand.run("/this/does/not/exist", "json", false);
         assertEquals(0, rc);
         assertEquals("[]\n", captured.toString());
     }
@@ -68,7 +59,7 @@ class ListCommandTest {
         saveState(tmp, "alpha");
         saveState(tmp, "beta");
 
-        int rc = newCmd(tmp.toString(), "table", true).call();
+        int rc = ListCommand.run(tmp.toString(), "table", true);
         assertEquals(0, rc);
 
         String out = captured.toString();
@@ -84,7 +75,7 @@ class ListCommandTest {
     void tableFormatPrintsHeaderAndOneRowPerContainer(@TempDir Path tmp) throws IOException {
         saveState(tmp, "ctr-1");
 
-        int rc = newCmd(tmp.toString(), "table", false).call();
+        int rc = ListCommand.run(tmp.toString(), "table", false);
         assertEquals(0, rc);
 
         String out = captured.toString();
@@ -106,7 +97,7 @@ class ListCommandTest {
         Files.createDirectories(tmp.resolve("garbage-dir"));
         // No state.json inside garbage-dir.
 
-        int rc = newCmd(tmp.toString(), "json", false).call();
+        int rc = ListCommand.run(tmp.toString(), "json", false);
         assertEquals(0, rc);
         String out = captured.toString();
         assertTrue(out.contains("good"));

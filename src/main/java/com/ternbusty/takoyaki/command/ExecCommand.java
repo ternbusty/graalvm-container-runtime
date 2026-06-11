@@ -4,16 +4,11 @@ import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.lang.foreign.Arena;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * Run an additional command inside an existing container by joining all of its
@@ -22,33 +17,14 @@ import java.util.concurrent.Callable;
  * Limitations vs runc/youki: we don't re-apply seccomp / capabilities for the new
  * process; it inherits whatever the init has, which is usually what the user wants.
  */
-@Command(name = "exec", description = "Run a command in a running container")
-public final class ExecCommand implements Callable<Integer> {
-    @ParentCommand TakoyakiRoot root;
+public final class ExecCommand {
+    private ExecCommand() {}
 
-    @Option(names = {"-u", "--user"}, description = "User uid[:gid]")
-    String user;
-
-    @Option(names = {"-t", "--tty"}, description = "Allocate a pseudo-TTY (accepted, no-op)")
-    boolean tty;
-
-    @Option(names = {"--cwd"}, description = "Working directory")
-    String cwd;
-
-    @Option(names = {"-e", "--env"}, description = "Environment variables (KEY=VALUE)")
-    List<String> envs;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Parameters(index = "1..*", description = "Command and arguments")
-    List<String> command;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId, String user, String cwd,
+                          List<String> envs, List<String> command) {
         State state;
         try {
-            state = State.load(root.rootPath, containerId).refreshStatus();
+            state = State.load(rootPath, containerId).refreshStatus();
         } catch (Exception e) {
             Logger.error("failed to load state: " + e.getMessage());
             return 1;

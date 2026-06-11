@@ -23,8 +23,9 @@ java {
 }
 
 dependencies {
-    implementation("info.picocli:picocli:4.7.7")
-    annotationProcessor("info.picocli:picocli-codegen:4.7.7")
+    // No CLI parsing framework — Main.java hand-parses argv. picocli's
+    // reflection-driven CommandSpec build cost ~80 ms on aarch64 native-image,
+    // which dominated takoyaki's per-invocation wall time.
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.0")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.0")
     compileOnly("org.graalvm.sdk:nativeimage:25.0.2")
@@ -43,7 +44,6 @@ application {
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(
         listOf(
-            "-Aproject=${project.group}/${project.name}",
             "--enable-preview",
         ),
     )
@@ -191,7 +191,6 @@ graalvmNative {
                 // SubstrateVM forbids native lookups at build time. Those
                 // are listed via --initialize-at-run-time below.
                 "--initialize-at-build-time=com.ternbusty.takoyaki",
-                "--initialize-at-build-time=picocli",
                 // Run-time init for FFM/native-using classes:
                 "--initialize-at-run-time=com.ternbusty.takoyaki.util.Json",
                 "--initialize-at-run-time=com.ternbusty.takoyaki.command.Wait",
