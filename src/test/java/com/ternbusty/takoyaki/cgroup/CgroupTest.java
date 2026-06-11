@@ -166,19 +166,38 @@ class CgroupTest {
 
     @Test
     void cleanupRemovesDirectoryWhenItExists() {
+        // The new cleanup path is: cgroup.kill -> poll cgroup.procs until blank
+        // -> rmdir. We mock readString to return an empty body so the polling
+        // loop exits on the first iteration; writeString to succeed silently.
         try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.exists(eq(Path.of("/sys/fs/cgroup/takoyaki-x")))).thenReturn(true);
+            Path cgDir = Path.of("/sys/fs/cgroup/takoyaki-x");
+            fm.when(() -> Files.exists(eq(cgDir))).thenReturn(true);
+            fm.when(() -> Files.readString(eq(cgDir.resolve("cgroup.procs"))))
+                    .thenReturn("");
+            // writeString is a void-returning overload in Files; stub it to no-op
+            // so the cgroup.kill write doesn't throw and short-circuit cleanup.
+            fm.when(() -> Files.writeString(any(Path.class), anyString()))
+                    .thenReturn(cgDir);
+
             Cgroup.cleanup("/takoyaki-x");
-            fm.verify(() -> Files.delete(eq(Path.of("/sys/fs/cgroup/takoyaki-x"))));
+
+            // The whole point of cleanup: rmdir the leaf cgroup directory.
+            fm.verify(() -> Files.delete(eq(cgDir)));
+            // The cgroup v2 fast-path also wrote "1" to cgroup.kill.
+            fm.verify(() -> Files.writeString(
+                    eq(cgDir.resolve("cgroup.kill")), eq("1")));
         }
     }
 
     @Test
-    void cleanupSkipsWhenDirectoryDoesNotExist() {
+    void cleanupSkipsEverythingWhenDirectoryDoesNotExist() {
+        // No directory -> nothing to kill, nothing to poll, nothing to delete.
+        // (Early return short-circuits the cgroup.kill write too.)
         try (MockedStatic<Files> fm = mockStatic(Files.class)) {
             fm.when(() -> Files.exists(any())).thenReturn(false);
             Cgroup.cleanup("/takoyaki-x");
             fm.verify(() -> Files.delete(any()), never());
+            fm.verify(() -> Files.writeString(any(Path.class), anyString()), never());
         }
     }
 
