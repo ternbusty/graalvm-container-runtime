@@ -1,12 +1,11 @@
 package com.ternbusty.takoyaki.state;
 
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.util.Json;
 import com.ternbusty.takoyaki.util.json.JsonMap;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -42,28 +41,28 @@ public final class State {
         return new State(ociVersion, id, s, pid, bundle, annotations, created);
     }
 
-    public static Path containerDir(String rootPath, String containerId) {
-        return Path.of(rootPath, containerId);
+    public static String containerDir(String rootPath, String containerId) {
+        return rootPath + "/" + containerId;
     }
 
-    public static Path statePath(String rootPath, String containerId) {
-        return containerDir(rootPath, containerId).resolve("state.json");
+    public static String statePath(String rootPath, String containerId) {
+        return containerDir(rootPath, containerId) + "/state.json";
     }
 
     public static boolean exists(String rootPath, String containerId) {
-        return Files.exists(statePath(rootPath, containerId));
+        return Fs.exists(statePath(rootPath, containerId));
     }
 
     public static State load(String rootPath, String containerId) throws IOException {
-        Path p = statePath(rootPath, containerId);
+        String p = statePath(rootPath, containerId);
         Logger.debug("loading state from " + p);
         return Json.readFile(p, State::fromJson);
     }
 
     public void save(String rootPath) throws IOException {
-        Path dir = containerDir(rootPath, id);
-        Files.createDirectories(dir);
-        Path p = dir.resolve("state.json");
+        String dir = containerDir(rootPath, id);
+        Fs.createDirectories(dir);
+        String p = dir + "/state.json";
         Logger.debug("saving state to " + p);
         Json.writeFile(p, toJson());
     }
@@ -87,10 +86,10 @@ public final class State {
     }
 
     private static boolean isProcessAlive(int pid) {
-        Path stat = Path.of("/proc", String.valueOf(pid), "stat");
-        if (!Files.exists(stat)) return false;
+        String stat = "/proc/" + pid + "/stat";
+        if (!Fs.exists(stat)) return false;
         try {
-            String content = Files.readString(stat);
+            String content = Fs.readString(stat);
             int lp = content.lastIndexOf(')');
             if (lp < 0 || lp + 2 >= content.length()) return false;
             char st = content.charAt(lp + 2);

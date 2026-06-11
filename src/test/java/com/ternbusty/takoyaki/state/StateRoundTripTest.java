@@ -46,14 +46,14 @@ class StateRoundTripTest {
 
     @Test
     void containerDirPathIsRootPathSlashId() {
-        Path p = State.containerDir("/run/takoyaki", "abc");
-        assertEquals(Path.of("/run/takoyaki/abc"), p);
+        String p = State.containerDir("/run/takoyaki", "abc");
+        assertEquals("/run/takoyaki/abc", p);
     }
 
     @Test
     void statePathIsContainerDirSlashStateJson() {
-        Path p = State.statePath("/run/takoyaki", "abc");
-        assertEquals(Path.of("/run/takoyaki/abc/state.json"), p);
+        String p = State.statePath("/run/takoyaki", "abc");
+        assertEquals("/run/takoyaki/abc/state.json", p);
     }
 
     @Test

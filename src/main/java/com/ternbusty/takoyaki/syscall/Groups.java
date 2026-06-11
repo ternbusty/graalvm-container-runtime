@@ -4,8 +4,6 @@ import com.ternbusty.takoyaki.logger.Logger;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 public final class Groups {
@@ -14,7 +12,7 @@ public final class Groups {
     public static void setAdditional(List<Integer> gids) {
         if (gids == null || gids.isEmpty()) return;
         try {
-            String s = Files.readString(Path.of("/proc/self/setgroups")).trim();
+            String s = Fs.readString("/proc/self/setgroups").trim();
             if ("deny".equals(s)) {
                 Logger.warn("setgroups denied in this user namespace, skipping");
                 return;

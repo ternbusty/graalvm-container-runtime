@@ -24,8 +24,7 @@ import com.ternbusty.takoyaki.time.TimeNs;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.lang.foreign.Arena;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 public final class InitProcess {
     private InitProcess() {}
@@ -63,8 +62,8 @@ public final class InitProcess {
         Logger.setContext("init");
         Logger.debug("init started, pid=" + Libc.getpid() + " ppid=" + Libc.getppid());
         try {
-            String mntNs = Files.readSymbolicLink(Path.of("/proc/self/ns/mnt")).toString();
-            String pidNs = Files.readSymbolicLink(Path.of("/proc/self/ns/pid")).toString();
+            String mntNs = Fs.readSymbolicLink("/proc/self/ns/mnt");
+            String pidNs = Fs.readSymbolicLink("/proc/self/ns/pid");
             Logger.debug("init mnt_ns=" + mntNs + " pid_ns=" + pidNs);
         } catch (Exception e) {
             Logger.warn("could not read ns: " + e.getMessage());
@@ -87,7 +86,7 @@ public final class InitProcess {
 
         Spec spec;
         try {
-            spec = Json.readFile(Path.of(bundlePath, "config.json"), Spec::fromJson);
+            spec = Json.readFile(bundlePath + "/config.json", Spec::fromJson);
         } catch (Exception e) {
             Logger.error("failed to load spec: " + e.getMessage());
             PosixIO._exit(1);
@@ -112,8 +111,7 @@ public final class InitProcess {
             // is inherited by the user process after exec.
             if (spec.process != null && spec.process.oomScoreAdj != null) {
                 try {
-                    java.nio.file.Files.writeString(
-                            java.nio.file.Path.of("/proc/self/oom_score_adj"),
+                    Fs.writeString("/proc/self/oom_score_adj",
                             spec.process.oomScoreAdj.toString());
                     Logger.debug("oom_score_adj=" + spec.process.oomScoreAdj);
                 } catch (java.io.IOException e) {

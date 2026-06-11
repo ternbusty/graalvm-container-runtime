@@ -1,5 +1,6 @@
 package com.ternbusty.takoyaki.config;
 
+import com.ternbusty.takoyaki.syscall.Fs;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,8 +15,8 @@ class KontainerConfigTest {
     void pathIsRootSlashIdSlashConfigJson() {
         // pause/resume/freeze all hang off this exact filename. If the convention
         // drifts, every subcommand stops finding the cgroup.
-        Path p = KontainerConfig.path("/run/takoyaki", "abc");
-        assertEquals(Path.of("/run/takoyaki/abc/config.json"), p);
+        String p = KontainerConfig.path("/run/takoyaki", "abc");
+        assertEquals("/run/takoyaki/abc/config.json", p);
     }
 
     @Test
@@ -29,26 +30,19 @@ class KontainerConfigTest {
 
     @Test
     void saveCreatesContainerDirectoryIfMissing(@TempDir Path tmp) throws IOException {
-        // Crucially this must NOT require the caller to mkdir first — Create
-        // saves config.json as part of the same call sequence.
         KontainerConfig c = new KontainerConfig("/sys/fs/cgroup/x");
         c.save(tmp.toString(), "freshly-created");
-        assertTrue(java.nio.file.Files.exists(
-                tmp.resolve("freshly-created").resolve("config.json")));
+        assertTrue(Fs.exists(tmp.resolve("freshly-created").resolve("config.json").toString()));
     }
 
     @Test
     void loadMissingFileThrowsIoException(@TempDir Path tmp) {
-        // Subcommands like pause distinguish "no config" from "wrong cgroup"
-        // via the IOException. Don't let it be silently swallowed.
         assertThrows(IOException.class,
                 () -> KontainerConfig.load(tmp.toString(), "never-existed"));
     }
 
     @Test
     void nullCgroupPathIsAllowedAndRoundTrips(@TempDir Path tmp) throws IOException {
-        // Containers without resources.cgroupsPath leave this null. We must
-        // serialize it as null rather than blowing up on Json.encode.
         KontainerConfig c = new KontainerConfig(null);
         c.save(tmp.toString(), "no-cgroup");
         KontainerConfig loaded = KontainerConfig.load(tmp.toString(), "no-cgroup");

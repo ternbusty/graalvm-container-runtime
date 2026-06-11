@@ -1,10 +1,8 @@
 package com.ternbusty.takoyaki.apparmor;
 
+import com.ternbusty.takoyaki.syscall.Fs;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.*;
@@ -14,7 +12,7 @@ class AppArmorTest {
 
     @Test
     void nullProfileIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             AppArmor.apply(null);
             fm.verifyNoInteractions();
         }
@@ -22,7 +20,7 @@ class AppArmorTest {
 
     @Test
     void emptyProfileIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             AppArmor.apply("");
             fm.verifyNoInteractions();
         }
@@ -30,9 +28,9 @@ class AppArmorTest {
 
     @Test
     void unconfinedSentinelIsNoOp() {
-        // OCI spec: an apparmorProfile of "unconfined" means *do nothing*.
+        // OCI spec says apparmorProfile="unconfined" means *do nothing*.
         // We must NOT treat it as a real profile name and try to load it.
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             AppArmor.apply("unconfined");
             fm.verifyNoInteractions();
         }
@@ -40,12 +38,12 @@ class AppArmorTest {
 
     @Test
     void neitherAttrPathExistsLogsWarnButDoesNotThrow() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.exists(anyString())).thenReturn(false);
             assertDoesNotThrow(() -> AppArmor.apply("test-profile"));
             // Both candidate paths must have been probed.
-            fm.verify(() -> Files.exists(eq(Path.of("/proc/self/attr/apparmor/exec"))));
-            fm.verify(() -> Files.exists(eq(Path.of("/proc/self/attr/exec"))));
+            fm.verify(() -> Fs.exists(eq("/proc/self/attr/apparmor/exec")));
+            fm.verify(() -> Fs.exists(eq("/proc/self/attr/exec")));
         }
     }
 }

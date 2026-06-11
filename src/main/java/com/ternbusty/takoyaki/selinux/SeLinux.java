@@ -1,10 +1,9 @@
 package com.ternbusty.takoyaki.selinux;
 
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Apply a SELinux exec context to the current thread.
@@ -20,12 +19,12 @@ public final class SeLinux {
 
     public static void apply(String label) {
         if (label == null || label.isEmpty()) return;
-        if (!Files.exists(Path.of("/sys/fs/selinux")) && !Files.exists(Path.of("/sys/fs/selinuxfs"))) {
+        if (!Fs.exists("/sys/fs/selinux") && !Fs.exists("/sys/fs/selinuxfs")) {
             Logger.debug("selinux not enabled, skipping label=" + label);
             return;
         }
         try {
-            Files.writeString(Path.of("/proc/self/attr/exec"), label);
+            Fs.writeString("/proc/self/attr/exec", label);
             Logger.debug("selinux exec label staged: " + label);
         } catch (IOException e) {
             Logger.warn("selinux exec label write failed (label=" + label + "): " + e.getMessage());
@@ -36,7 +35,7 @@ public final class SeLinux {
     public static void applyKeyCreate(String label) {
         if (label == null || label.isEmpty()) return;
         try {
-            Files.writeString(Path.of("/proc/self/attr/keycreate"), label);
+            Fs.writeString("/proc/self/attr/keycreate", label);
         } catch (IOException ignored) {}
     }
 }

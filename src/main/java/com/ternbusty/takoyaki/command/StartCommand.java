@@ -8,7 +8,6 @@ import com.ternbusty.takoyaki.state.ContainerStatus;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.util.Json;
 
-import java.nio.file.Path;
 
 public final class StartCommand {
     private StartCommand() {}
@@ -27,7 +26,7 @@ public final class StartCommand {
         }
         Spec spec = null;
         try {
-            spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec::fromJson);
+            spec = Json.readFile(state.bundle + "/config.json", Spec::fromJson);
         } catch (Exception e) {
             Logger.debug("could not reload spec for hooks: " + e.getMessage());
         }

@@ -6,7 +6,6 @@ import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.util.Json;
 
-import java.nio.file.Path;
 
 public final class UpdateCommand {
     private UpdateCommand() {}
@@ -30,7 +29,7 @@ public final class UpdateCommand {
         Spec.LinuxResources r = new Spec.LinuxResources();
         if (resourcesPath != null) {
             try {
-                Spec.LinuxResources parsed = Json.readFile(Path.of(resourcesPath),
+                Spec.LinuxResources parsed = Json.readFile(resourcesPath,
                         Spec.LinuxResources::fromJson);
                 r = parsed;
             } catch (Exception e) {

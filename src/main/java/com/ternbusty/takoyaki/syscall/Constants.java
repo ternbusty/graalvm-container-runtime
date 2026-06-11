@@ -72,8 +72,10 @@ public final class Constants {
 
     public static final int F_OK = 0;
     public static final int O_RDONLY = 0;
+    public static final int O_WRONLY = 1;
     public static final int O_RDWR = 2;
     public static final int O_CREAT = 0100;
+    public static final int O_TRUNC = 01000;
     public static final int O_DIRECTORY = isAarch64() ? 0x4000 : 0x10000;
 
     public static boolean isAarch64() {

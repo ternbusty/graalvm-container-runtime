@@ -7,12 +7,12 @@ import com.ternbusty.takoyaki.process.NamespaceFlags;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.lang.foreign.Arena;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +32,7 @@ public final class CreateCommand {
         // re-open config.json regardless of their cwd.
         String bundle;
         try {
-            bundle = Path.of(bundleIn).toAbsolutePath().normalize().toString();
+            bundle = Fs.absoluteNormalized(bundleIn);
         } catch (Exception e) {
             Logger.error("invalid bundle path: " + e.getMessage());
             return 1;
@@ -40,7 +40,7 @@ public final class CreateCommand {
 
         Spec spec;
         try {
-            spec = Json.readFile(Path.of(bundle, "config.json"), Spec::fromJson);
+            spec = Json.readFile(bundle + "/config.json", Spec::fromJson);
         } catch (Exception e) {
             Logger.error("failed to load config.json: " + e.getMessage());
             return 1;

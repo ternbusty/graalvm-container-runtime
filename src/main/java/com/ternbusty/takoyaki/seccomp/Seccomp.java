@@ -11,7 +11,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
-import java.nio.file.Path;
+import com.ternbusty.takoyaki.syscall.Fs;
 import java.util.List;
 
 public final class Seccomp {
@@ -261,10 +261,10 @@ public final class Seccomp {
     }
 
     public static boolean available() {
-        return Path.of("/usr/lib/x86_64-linux-gnu/libseccomp.so.2").toFile().exists()
-                || Path.of("/usr/lib/aarch64-linux-gnu/libseccomp.so.2").toFile().exists()
-                || Path.of("/lib/x86_64-linux-gnu/libseccomp.so.2").toFile().exists()
-                || Path.of("/lib/aarch64-linux-gnu/libseccomp.so.2").toFile().exists();
+        return Fs.exists("/usr/lib/x86_64-linux-gnu/libseccomp.so.2")
+                || Fs.exists("/usr/lib/aarch64-linux-gnu/libseccomp.so.2")
+                || Fs.exists("/lib/x86_64-linux-gnu/libseccomp.so.2")
+                || Fs.exists("/lib/aarch64-linux-gnu/libseccomp.so.2");
     }
 
     private static SymbolLookup libraryLookupWithFallback() {

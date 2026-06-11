@@ -3,14 +3,12 @@ package com.ternbusty.takoyaki.rootfs;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.syscall.Constants;
-import com.ternbusty.takoyaki.syscall.Libc;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 import com.ternbusty.takoyaki.syscall.SyscallHost;
 import com.ternbusty.takoyaki.syscall.Syscalls;
 
 import java.lang.foreign.Arena;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -29,7 +27,7 @@ public final class Devices {
             for (Spec.LinuxDevice d : devices) {
                 if (d.path == null || d.type == null) continue;
                 String target = rootfsPath + d.path;
-                try { Files.createDirectories(Path.of(target).getParent()); }
+                try { Fs.createDirectories(Fs.parent(target)); }
                 catch (Exception ignored) {}
                 int typeBits = typeBits(d.type);
                 if (typeBits == 0) { Logger.warn("unsupported device type: " + d.type); continue; }
@@ -43,13 +41,11 @@ public final class Devices {
                     // mknod respects the umask, so a spec fileMode like 0660 lands
                     // as 0640 with the default 0022 umask. Re-chmod to the requested
                     // mode (the type bits aren't allowed in chmod, so mask them out).
-                    try {
-                        if (d.fileMode != null) {
-                            Files.setPosixFilePermissions(Path.of(target),
-                                    permsForMode(d.fileMode.intValue() & 0777));
+                    if (d.fileMode != null) {
+                        int chmodRc = Fs.chmod(target, d.fileMode.intValue() & 0777);
+                        if (chmodRc != 0) {
+                            Logger.debug("chmod " + d.path + " failed");
                         }
-                    } catch (Exception e) {
-                        Logger.debug("chmod " + d.path + " failed: " + e.getMessage());
                     }
                     Logger.debug("mknod " + d.path + " (" + d.type + " " + d.major + ":" + d.minor + ")");
                     continue;
@@ -83,25 +79,6 @@ public final class Devices {
             case "p"      -> Constants.S_IFIFO;
             default       -> 0;
         };
-    }
-
-    /**
-     * Translate the bottom 9 bits of a Unix mode word into the
-     * PosixFilePermission set Files.setPosixFilePermissions wants.
-     * Package-visible for tests.
-     */
-    static java.util.Set<java.nio.file.attribute.PosixFilePermission> permsForMode(int permBits) {
-        java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = new java.util.HashSet<>();
-        if ((permBits & 0400) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
-        if ((permBits & 0200) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
-        if ((permBits & 0100) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE);
-        if ((permBits & 0040) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_READ);
-        if ((permBits & 0020) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_WRITE);
-        if ((permBits & 0010) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE);
-        if ((permBits & 0004) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_READ);
-        if ((permBits & 0002) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_WRITE);
-        if ((permBits & 0001) != 0) perms.add(java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE);
-        return perms;
     }
 
     /** Encode (major, minor) into a Linux dev_t (glibc convention). Package-visible for tests. */

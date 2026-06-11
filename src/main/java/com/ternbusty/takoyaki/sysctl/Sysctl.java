@@ -1,10 +1,9 @@
 package com.ternbusty.takoyaki.sysctl;
 
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
 /**
@@ -22,9 +21,9 @@ public final class Sysctl {
         for (Map.Entry<String, String> e : sysctls.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
-            Path path = Path.of("/proc/sys/" + key.replace('.', '/'));
+            String path = "/proc/sys/" + key.replace('.', '/');
             try {
-                Files.writeString(path, value);
+                Fs.writeString(path, value);
                 Logger.debug("sysctl " + key + "=" + value);
             } catch (IOException ex) {
                 Logger.warn("sysctl " + key + "=" + value + " failed: " + ex.getMessage());

@@ -2,11 +2,9 @@ package com.ternbusty.takoyaki.rootfs;
 
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 /**
@@ -31,14 +29,14 @@ public final class UserDb {
     }
 
     private static void addPasswd(int uid, int gid) {
-        Path p = Path.of("/etc/passwd");
-        if (!Files.exists(p)) return;
+        String p = "/etc/passwd";
+        if (!Fs.exists(p)) return;
         try {
-            String content = Files.readString(p);
+            String content = Fs.readString(p);
             if (lineForUid(content, uid) != null) return;
             String entry = "container:x:" + uid + ":" + gid
                     + ":container user:/:/sbin/nologin\n";
-            Files.writeString(p, entry, StandardOpenOption.APPEND);
+            appendString(p, content, entry);
             Logger.debug("/etc/passwd entry added for uid=" + uid);
         } catch (IOException e) {
             Logger.debug("/etc/passwd update skipped: " + e.getMessage());
@@ -46,17 +44,25 @@ public final class UserDb {
     }
 
     private static void addGroup(int gid, String fallbackName) {
-        Path p = Path.of("/etc/group");
-        if (!Files.exists(p)) return;
+        String p = "/etc/group";
+        if (!Fs.exists(p)) return;
         try {
-            String content = Files.readString(p);
+            String content = Fs.readString(p);
             if (lineForGid(content, gid) != null) return;
             String entry = fallbackName + ":x:" + gid + ":\n";
-            Files.writeString(p, entry, StandardOpenOption.APPEND);
+            appendString(p, content, entry);
             Logger.debug("/etc/group entry added for gid=" + gid);
         } catch (IOException e) {
             Logger.debug("/etc/group update skipped: " + e.getMessage());
         }
+    }
+
+    /**
+     * Fs has no append-and-truncate-clear primitive; we read+write the whole file.
+     * Both /etc/passwd and /etc/group are tiny (<10 KB), so this isn't a hot path.
+     */
+    private static void appendString(String path, String existing, String addition) throws IOException {
+        Fs.writeString(path, existing + addition);
     }
 
     private static String lineForUid(String content, int uid) {

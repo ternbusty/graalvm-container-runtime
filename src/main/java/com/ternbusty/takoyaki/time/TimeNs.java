@@ -2,21 +2,14 @@ package com.ternbusty.takoyaki.time;
 
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
 /**
  * Apply OCI {@code linux.timeOffsets} to the current time namespace by writing the
  * clock offsets into {@code /proc/self/timens_offsets}.
- *
- * Allowed clocks: monotonic, boottime. Format per line:
- *   {@code <clock_id> <secs> <nanosecs>}
- *
- * The kernel only allows writes while the namespace has no children, so we do this
- * inside Stage-2 (PID 1 in the new time NS) before any further forks.
  */
 public final class TimeNs {
     private static final int CLOCK_MONOTONIC = 1;
@@ -44,7 +37,7 @@ public final class TimeNs {
         }
         if (content.length() == 0) return;
         try {
-            Files.writeString(Path.of("/proc/self/timens_offsets"), content.toString());
+            Fs.writeString("/proc/self/timens_offsets", content.toString());
             Logger.debug("timens_offsets applied: " + content.toString().trim().replace('\n', '|'));
         } catch (IOException e) {
             Logger.warn("timens_offsets write failed: " + e.getMessage());

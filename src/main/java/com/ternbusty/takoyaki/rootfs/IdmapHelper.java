@@ -3,15 +3,13 @@ package com.ternbusty.takoyaki.rootfs;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.syscall.Constants;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * Create a temporary user namespace populated with the given uid/gid mappings,
@@ -93,8 +91,8 @@ public final class IdmapHelper {
                 // Probe what /proc/self/ns/user looks like AFTER unshare.
                 String childLink = "?", byPidLink = "?";
                 try {
-                    childLink = Files.readSymbolicLink(Path.of("/proc/self/ns/user")).toString();
-                    byPidLink = Files.readSymbolicLink(Path.of("/proc/" + childPid + "/ns/user")).toString();
+                    childLink = Fs.readSymbolicLink("/proc/self/ns/user");
+                    byPidLink = Fs.readSymbolicLink("/proc/" + childPid + "/ns/user");
                 } catch (IOException ignored) {}
                 System.err.println("[idmap-child] pid=" + childPid + " unshare rc=" + rc
                         + " errno=" + savedErrno
@@ -131,8 +129,8 @@ public final class IdmapHelper {
             // Sanity-check: the helper's userns must NOT be our own (the kernel rejects
             // mount_setattr(IDMAP) with EPERM if userns_fd == init_user_ns).
             try {
-                String helperLink = Files.readSymbolicLink(Path.of("/proc/" + pid + "/ns/user")).toString();
-                String myLink = Files.readSymbolicLink(Path.of("/proc/self/ns/user")).toString();
+                String helperLink = Fs.readSymbolicLink("/proc/" + pid + "/ns/user");
+                String myLink = Fs.readSymbolicLink("/proc/self/ns/user");
                 Logger.debug("idmap parent pid=" + Libc.getpid() + " childPid=" + pid
                         + " helper=" + helperLink + " ours=" + myLink);
                 if (helperLink.equals(myLink)) {
@@ -144,8 +142,8 @@ public final class IdmapHelper {
             writeMappings(pid, gidMaps, "gid_map");
             // Verify what actually landed in /proc/<helper>/uid_map.
             try {
-                String uidMapContent = Files.readString(Path.of("/proc/" + pid + "/uid_map"));
-                String gidMapContent = Files.readString(Path.of("/proc/" + pid + "/gid_map"));
+                String uidMapContent = Fs.readString("/proc/" + pid + "/uid_map");
+                String gidMapContent = Fs.readString("/proc/" + pid + "/gid_map");
                 Logger.debug("idmap helper uid_map=" + uidMapContent.replace("\n", "|")
                         + " gid_map=" + gidMapContent.replace("\n", "|"));
             } catch (IOException e) {
@@ -187,7 +185,7 @@ public final class IdmapHelper {
               .append(m.size).append('\n');
         }
         try {
-            Files.writeString(Path.of("/proc/" + pid + "/" + file), sb.toString());
+            Fs.writeString("/proc/" + pid + "/" + file, sb.toString());
         } catch (IOException e) {
             Logger.warn("write /proc/" + pid + "/" + file + " failed: " + e.getMessage());
         }

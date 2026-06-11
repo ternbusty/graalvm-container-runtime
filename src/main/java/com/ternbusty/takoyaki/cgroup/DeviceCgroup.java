@@ -12,7 +12,6 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -277,10 +276,4 @@ public final class DeviceCgroup {
         return (arch.contains("aarch64") || arch.contains("arm64")) ? NR_bpf_aarch64 : NR_bpf_x86_64;
     }
 
-    /** Standalone path helper used by callers that have a Path. */
-    @SuppressWarnings("unused")
-    private static int openCgroupDir(Arena arena, Path p) {
-        return PosixIO.open(arena, p.toString(),
-                Constants.O_RDONLY | Constants.O_DIRECTORY, 0);
-    }
 }

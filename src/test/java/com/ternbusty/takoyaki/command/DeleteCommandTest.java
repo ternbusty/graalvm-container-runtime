@@ -82,7 +82,7 @@ class DeleteCommandTest {
             sm.when(() -> State.exists(anyString(), anyString())).thenReturn(true);
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
             sm.when(() -> State.containerDir(anyString(), anyString()))
-                    .thenReturn(java.nio.file.Path.of("/tmp/nonexistent-container-dir"));
+                    .thenReturn("/tmp/nonexistent-container-dir");
             lm.when(() -> Libc.kill(anyInt(), anyInt())).thenReturn(0);
 
             int rc = DeleteCommand.run(ROOT, "ctr-a", true);
@@ -102,7 +102,7 @@ class DeleteCommandTest {
             sm.when(() -> State.exists(anyString(), anyString())).thenReturn(true);
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
             sm.when(() -> State.containerDir(anyString(), anyString()))
-                    .thenReturn(java.nio.file.Path.of("/tmp/nonexistent-container-dir"));
+                    .thenReturn("/tmp/nonexistent-container-dir");
 
             int rc = DeleteCommand.run(ROOT, "ctr-a", false);
 

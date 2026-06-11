@@ -1,11 +1,10 @@
 package com.ternbusty.takoyaki.config;
 
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.util.Json;
 import com.ternbusty.takoyaki.util.json.JsonMap;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
 public final class KontainerConfig {
@@ -17,13 +16,13 @@ public final class KontainerConfig {
         this.cgroupPath = cgroupPath;
     }
 
-    public static Path path(String rootPath, String containerId) {
-        return Path.of(rootPath, containerId, "config.json");
+    public static String path(String rootPath, String containerId) {
+        return rootPath + "/" + containerId + "/config.json";
     }
 
     public void save(String rootPath, String containerId) throws IOException {
-        Path p = path(rootPath, containerId);
-        Files.createDirectories(p.getParent());
+        String p = path(rootPath, containerId);
+        Fs.createDirectories(Fs.parent(p));
         Json.writeFile(p, toJson());
     }
 

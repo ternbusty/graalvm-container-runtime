@@ -7,14 +7,11 @@ import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.stream.Stream;
 
 public final class DeleteCommand {
     private DeleteCommand() {}
@@ -53,27 +50,23 @@ public final class DeleteCommand {
         }
 
         try {
-            Files.deleteIfExists(Path.of("/tmp/takoyaki-" + containerId + ".sock"));
+            Fs.deleteIfExists("/tmp/takoyaki-" + containerId + ".sock");
         } catch (IOException e) {
             Logger.warn("failed to remove notify socket: " + e.getMessage());
         }
 
         // poststop hook fires in the runtime namespace before we remove the state dir.
         try {
-            Spec spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec::fromJson);
+            Spec spec = Json.readFile(state.bundle + "/config.json", Spec::fromJson);
             if (spec.hooks != null) Hooks.run(spec.hooks.poststop, state, "poststop");
         } catch (IOException ignored) {
             // bundle may already be gone for stopped containers; skip silently
         }
 
-        Path dir = State.containerDir(rootPath, containerId);
+        String dir = State.containerDir(rootPath, containerId);
         try {
-            if (Files.exists(dir)) {
-                try (Stream<Path> walk = Files.walk(dir)) {
-                    walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                        try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-                    });
-                }
+            if (Fs.exists(dir)) {
+                Fs.deleteRecursively(dir);
             }
             Logger.info("container " + containerId + " deleted");
             return 0;

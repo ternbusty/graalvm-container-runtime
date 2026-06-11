@@ -2,10 +2,9 @@ package com.ternbusty.takoyaki.command;
 
 import com.ternbusty.takoyaki.config.KontainerConfig;
 import com.ternbusty.takoyaki.logger.Logger;
+import com.ternbusty.takoyaki.syscall.Fs;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /** Shared helper for pause / resume — writes cgroup.freeze (cgroup v2). */
 final class Freeze {
@@ -24,9 +23,9 @@ final class Freeze {
             return 1;
         }
         String norm = cgroupPath.startsWith("/") ? cgroupPath.substring(1) : cgroupPath;
-        Path freeze = Path.of("/sys/fs/cgroup", norm, "cgroup.freeze");
+        String freeze = "/sys/fs/cgroup/" + norm + "/cgroup.freeze";
         try {
-            Files.writeString(freeze, value);
+            Fs.writeString(freeze, value);
             Logger.info(op + " ok for " + containerId);
             return 0;
         } catch (IOException e) {

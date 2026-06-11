@@ -9,13 +9,12 @@ import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.state.ContainerStatus;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.syscall.Constants;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 import com.ternbusty.takoyaki.syscall.Rlimit;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 public final class MainProcess {
@@ -27,7 +26,7 @@ public final class MainProcess {
         Logger.setContext("main");
         Logger.debug("main proc started; stage1=" + stage1Pid);
         try {
-            String mntNs = java.nio.file.Files.readSymbolicLink(java.nio.file.Path.of("/proc/self/ns/mnt")).toString();
+            String mntNs = Fs.readSymbolicLink("/proc/self/ns/mnt");
             Logger.debug("main mnt_ns=" + mntNs);
         } catch (Exception e) {}
 
@@ -58,7 +57,7 @@ public final class MainProcess {
                 boolean privileged = (euid == 0);
                 if (!privileged) {
                     try {
-                        Files.writeString(Path.of("/proc/" + bootstrapPid + "/setgroups"), "deny\n");
+                        Fs.writeString("/proc/" + bootstrapPid + "/setgroups", "deny\n");
                     } catch (IOException e) {
                         Logger.warn("setgroups write failed: " + e.getMessage());
                     }
@@ -76,8 +75,8 @@ public final class MainProcess {
                                     spec.linux.gidMappings);
                 }
                 if (!wroteViaHelper) {
-                    Files.writeString(Path.of("/proc/" + bootstrapPid + "/uid_map"), uidMap);
-                    Files.writeString(Path.of("/proc/" + bootstrapPid + "/gid_map"), gidMap);
+                    Fs.writeString("/proc/" + bootstrapPid + "/uid_map", uidMap);
+                    Fs.writeString("/proc/" + bootstrapPid + "/gid_map", gidMap);
                 }
 
                 SyncChannel.writeInt32(syncFd, SyncChannel.MSG_USERMAP_ACK);
@@ -119,7 +118,7 @@ public final class MainProcess {
             }
 
             if (pidFile != null) {
-                Files.writeString(Path.of(pidFile), Integer.toString(stage2Pid));
+                Fs.writeString(pidFile, Integer.toString(stage2Pid));
             }
 
             Logger.info("container " + containerId + " created with init pid " + stage2Pid);
@@ -169,7 +168,7 @@ public final class MainProcess {
 
     private static long uidFromProc() {
         try {
-            for (String line : Files.readAllLines(Path.of("/proc/self/status"))) {
+            for (String line : Fs.readAllLines("/proc/self/status")) {
                 if (line.startsWith("Uid:")) {
                     String[] parts = line.split("\\s+");
                     return Long.parseLong(parts[1]);

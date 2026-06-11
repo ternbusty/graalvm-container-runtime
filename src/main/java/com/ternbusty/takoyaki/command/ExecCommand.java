@@ -2,11 +2,11 @@ package com.ternbusty.takoyaki.command;
 
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.syscall.Libc;
 import com.ternbusty.takoyaki.syscall.PosixIO;
 
 import java.lang.foreign.Arena;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,7 +45,7 @@ public final class ExecCommand {
         try (Arena arena = Arena.ofConfined()) {
             for (String t : nsTypes) {
                 String path = "/proc/" + initPid + "/ns/" + t;
-                if (!java.nio.file.Files.exists(Path.of(path))) continue;
+                if (!Fs.exists(path)) continue;
                 int fd = PosixIO.open(arena,
                         path,
                         com.ternbusty.takoyaki.syscall.Constants.O_RDONLY, 0);

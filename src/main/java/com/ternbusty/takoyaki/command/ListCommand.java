@@ -2,12 +2,10 @@ package com.ternbusty.takoyaki.command;
 
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,18 +13,17 @@ public final class ListCommand {
     private ListCommand() {}
 
     public static int run(String rootPath, String format, boolean quiet) {
-        Path rootDir = Path.of(rootPath);
-        if (!Files.isDirectory(rootDir)) {
+        if (!Fs.isDirectory(rootPath)) {
             if ("json".equals(format)) System.out.println("[]");
             return 0;
         }
         List<State> states = new ArrayList<>();
-        try (DirectoryStream<Path> ds = Files.newDirectoryStream(rootDir)) {
-            for (Path child : ds) {
-                if (!Files.isDirectory(child)) continue;
+        try {
+            for (String entry : Fs.list(rootPath)) {
+                String child = rootPath + "/" + entry;
+                if (!Fs.isDirectory(child)) continue;
                 try {
-                    State s = State.load(rootPath, child.getFileName().toString())
-                            .refreshStatus();
+                    State s = State.load(rootPath, entry).refreshStatus();
                     states.add(s);
                 } catch (Exception ignored) {}
             }

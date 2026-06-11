@@ -3,9 +3,6 @@ package com.ternbusty.takoyaki.syscall;
 import com.ternbusty.takoyaki.logger.Logger;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,9 +30,8 @@ public final class CloseRange {
 
     private static void fallbackCloexec(int minFd) {
         List<Integer> fds = new ArrayList<>();
-        try (DirectoryStream<Path> ds = Files.newDirectoryStream(Path.of("/proc/self/fd"))) {
-            for (Path p : ds) {
-                String name = p.getFileName().toString();
+        try {
+            for (String name : Fs.list("/proc/self/fd")) {
                 try {
                     int fd = Integer.parseInt(name);
                     if (fd >= minFd) fds.add(fd);

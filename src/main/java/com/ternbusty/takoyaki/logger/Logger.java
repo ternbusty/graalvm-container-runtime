@@ -1,10 +1,10 @@
 package com.ternbusty.takoyaki.logger;
 
+import com.ternbusty.takoyaki.syscall.Fs;
+
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -17,7 +17,10 @@ public final class Logger {
 
     private static volatile Level level = Level.INFO;
     private static volatile String context = "main";
+    /** Default destination is stderr (PrintStream is in java.base, no java.nio.file). */
     private static volatile PrintStream out = System.err;
+    /** When -1 we write to {@link #out}; otherwise we Fs.appendBytes directly. */
+    private static volatile int logFd = -1;
     private static volatile Format format = Format.TEXT;
 
     private Logger() {}
@@ -28,8 +31,7 @@ public final class Logger {
 
     public static void setLogFile(String path) {
         try {
-            out = new PrintStream(Files.newOutputStream(Path.of(path),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND));
+            logFd = Fs.openForAppend(path);
         } catch (IOException e) {
             System.err.println("[logger] failed to open log file " + path + ": " + e.getMessage());
         }
@@ -42,17 +44,24 @@ public final class Logger {
 
     private static void log(Level l, String msg) {
         if (l.ordinal() < level.ordinal()) return;
+        String line;
         if (format == Format.JSON) {
             String ts = OffsetDateTime.now(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            out.println("{\"level\":\"" + l.name().toLowerCase()
+            line = "{\"level\":\"" + l.name().toLowerCase()
                     + "\",\"msg\":\"" + escape(msg)
-                    + "\",\"time\":\"" + ts + "\"}");
+                    + "\",\"time\":\"" + ts + "\"}\n";
         } else {
             String ts = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            out.println("[" + ts + "] [" + l + "] [" + context + "] " + msg);
+            line = "[" + ts + "] [" + l + "] [" + context + "] " + msg + "\n";
         }
-        out.flush();
+        if (logFd >= 0) {
+            try { Fs.appendBytes(logFd, line.getBytes(StandardCharsets.UTF_8)); }
+            catch (IOException ignored) {}
+        } else {
+            out.print(line);
+            out.flush();
+        }
     }
 
     /** JSON-escape a log message. Package-visible for unit tests. */

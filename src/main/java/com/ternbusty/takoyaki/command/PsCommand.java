@@ -3,11 +3,10 @@ package com.ternbusty.takoyaki.command;
 import com.ternbusty.takoyaki.config.KontainerConfig;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
+import com.ternbusty.takoyaki.syscall.Fs;
 import com.ternbusty.takoyaki.util.Json;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,9 +29,9 @@ public final class PsCommand {
         List<Integer> pids = new ArrayList<>();
         if (cgroupPath != null) {
             String norm = cgroupPath.startsWith("/") ? cgroupPath.substring(1) : cgroupPath;
-            Path procs = Path.of("/sys/fs/cgroup", norm, "cgroup.procs");
+            String procs = "/sys/fs/cgroup/" + norm + "/cgroup.procs";
             try {
-                for (String line : Files.readAllLines(procs)) {
+                for (String line : Fs.readAllLines(procs)) {
                     String t = line.trim();
                     if (!t.isEmpty()) pids.add(Integer.parseInt(t));
                 }
@@ -50,7 +49,7 @@ public final class PsCommand {
         for (int pid : pids) {
             String cmd = "";
             try {
-                cmd = Files.readString(Path.of("/proc", String.valueOf(pid), "cmdline"))
+                cmd = Fs.readString("/proc/" + pid + "/cmdline")
                         .replace('\0', ' ').trim();
             } catch (IOException ignored) {}
             System.out.printf("%-8d %s%n", pid, cmd);

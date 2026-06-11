@@ -1,12 +1,10 @@
 package com.ternbusty.takoyaki.sysctl;
 
+import com.ternbusty.takoyaki.syscall.Fs;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.OpenOption;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,7 +16,7 @@ class SysctlTest {
 
     @Test
     void nullMapIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             Sysctl.apply(null);
             fm.verifyNoInteractions();
         }
@@ -26,7 +24,7 @@ class SysctlTest {
 
     @Test
     void emptyMapIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             Sysctl.apply(Map.of());
             fm.verifyNoInteractions();
         }
@@ -37,28 +35,23 @@ class SysctlTest {
         // OCI sysctl keys use dots (net.ipv4.ip_forward) but the kernel's
         // virtual files use slashes (/proc/sys/net/ipv4/ip_forward). This
         // translation is the entire job of Sysctl.apply.
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.writeString(any(Path.class), anyString(), any(OpenOption[].class)))
-                    .thenReturn(Path.of("/dev/null")); // return ignored
-            fm.when(() -> Files.writeString(any(Path.class), anyString()))
-                    .thenReturn(Path.of("/dev/null"));
-
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             Sysctl.apply(Map.of("net.ipv4.ip_forward", "1"));
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/proc/sys/net/ipv4/ip_forward")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/proc/sys/net/ipv4/ip_forward"),
                     eq("1")));
         }
     }
 
     @Test
     void writeFailureIsLoggedNotPropagated() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.writeString(any(Path.class), anyString()))
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.writeString(anyString(), anyString()))
                     .thenThrow(new IOException("EROFS"));
 
-            // The runtime is supposed to warn and continue, not crash, when
-            // a sysctl is denied (host kernel rejects, namespace forbids, …).
+            // The runtime warns and continues, not crash, when a sysctl is denied
+            // (host kernel rejects, namespace forbids, ...).
             assertDoesNotThrow(() -> Sysctl.apply(Map.of("kernel.something", "1")));
         }
     }
@@ -70,18 +63,16 @@ class SysctlTest {
         in.put("net.ipv4.bad_key",   "1");
         in.put("net.ipv4.good_key", "2");
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.writeString(eq(Path.of("/proc/sys/net/ipv4/bad_key")), anyString()))
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.writeString(eq("/proc/sys/net/ipv4/bad_key"), anyString()))
                     .thenThrow(new IOException("EROFS"));
-            fm.when(() -> Files.writeString(eq(Path.of("/proc/sys/net/ipv4/good_key")), anyString()))
-                    .thenReturn(Path.of("/dev/null"));
 
             Sysctl.apply(in);
 
             // Even though the first entry threw, the loop must have attempted
             // the second one.
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/proc/sys/net/ipv4/good_key")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/proc/sys/net/ipv4/good_key"),
                     eq("2")));
         }
     }

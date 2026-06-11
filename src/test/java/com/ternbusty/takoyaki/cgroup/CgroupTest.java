@@ -1,13 +1,10 @@
 package com.ternbusty.takoyaki.cgroup;
 
 import com.ternbusty.takoyaki.spec.Spec;
+import com.ternbusty.takoyaki.syscall.Fs;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -19,7 +16,7 @@ class CgroupTest {
 
     @Test
     void nullCgroupPathIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             Cgroup.setup(123, null, null);
             fm.verifyNoInteractions();
         }
@@ -29,15 +26,14 @@ class CgroupTest {
     void leadingSlashIsStrippedBeforeResolving() {
         // We accept both "/takoyaki-x" and "takoyaki-x" from the spec. The
         // resulting cgroup path must be /sys/fs/cgroup/takoyaki-x either way.
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
 
             Cgroup.setup(123, "/takoyaki-x", null);
-            fm.verify(() -> Files.createDirectories(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-x"))));
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-x/cgroup.procs")),
+
+            fm.verify(() -> Fs.createDirectories(eq("/sys/fs/cgroup/takoyaki-x")));
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-x/cgroup.procs"),
                     eq("123")));
         }
     }
@@ -50,15 +46,16 @@ class CgroupTest {
         r.memory = new Spec.LinuxMemory();
         r.memory.limit = 67108864L; // 64 MiB
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki-mem", linux);
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-mem/memory.max")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-mem/memory.max"),
                     eq("67108864")));
         }
     }
@@ -69,15 +66,16 @@ class CgroupTest {
         r.memory = new Spec.LinuxMemory();
         r.memory.limit = -1L;
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki-mem", linux);
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-mem/memory.max")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-mem/memory.max"),
                     eq("max")));
         }
     }
@@ -88,15 +86,16 @@ class CgroupTest {
         r.cpu = new Spec.LinuxCpu();
         r.cpu.cpus = "0-1";
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki-cpu", linux);
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-cpu/cpuset.cpus")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-cpu/cpuset.cpus"),
                     eq("0-1")));
         }
     }
@@ -109,15 +108,16 @@ class CgroupTest {
         r.cpu.quota = 50000L;
         r.cpu.period = 100000L;
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki-q", linux);
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-q/cpu.max")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-q/cpu.max"),
                     eq("50000 100000")));
         }
     }
@@ -128,15 +128,16 @@ class CgroupTest {
         r.pids = new Spec.LinuxPids();
         r.pids.limit = 100;
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki-p", linux);
 
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/takoyaki-p/pids.max")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/takoyaki-p/pids.max"),
                     eq("100")));
         }
     }
@@ -150,16 +151,17 @@ class CgroupTest {
         r.memory = new Spec.LinuxMemory();
         r.memory.limit = 4096L;
 
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.createDirectories(any())).thenReturn(null);
-            fm.when(() -> Files.writeString(any(), anyString())).thenReturn(Path.of("/dev/null"));
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.parent(anyString())).thenCallRealMethod();
+            fm.when(() -> Fs.name(anyString())).thenCallRealMethod();
+
             Spec.Linux linux = new Spec.Linux();
             linux.resources = r;
             Cgroup.setup(123, "/takoyaki/sub", linux);
 
             // The root cgroup must get a "+memory" write.
-            fm.verify(() -> Files.writeString(
-                    eq(Path.of("/sys/fs/cgroup/cgroup.subtree_control")),
+            fm.verify(() -> Fs.writeString(
+                    eq("/sys/fs/cgroup/cgroup.subtree_control"),
                     eq("+memory")));
         }
     }
@@ -167,21 +169,19 @@ class CgroupTest {
     @Test
     void cleanupRemovesDirectoryWhenItExists() {
         // The cleanup path is: write '1' to cgroup.kill -> retry rmdir until
-        // it succeeds (or the deadline). On the happy path Files.delete
-        // succeeds on the first attempt.
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            Path cgDir = Path.of("/sys/fs/cgroup/takoyaki-x");
-            fm.when(() -> Files.exists(eq(cgDir))).thenReturn(true);
-            fm.when(() -> Files.writeString(any(Path.class), anyString()))
-                    .thenReturn(cgDir);
-            // Files.delete returns void; the default (no stub) is to do nothing
-            // and return successfully, which matches the happy path.
+        // it succeeds (or the deadline). On the happy path Fs.delete succeeds
+        // on the first attempt.
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            String cgDir = "/sys/fs/cgroup/takoyaki-x";
+            fm.when(() -> Fs.exists(eq(cgDir))).thenReturn(true);
+            // Fs.delete and Fs.writeString return void; the default (no stub)
+            // is to do nothing, which matches the happy path.
 
             Cgroup.cleanup("/takoyaki-x");
 
-            fm.verify(() -> Files.writeString(
-                    eq(cgDir.resolve("cgroup.kill")), eq("1")));
-            fm.verify(() -> Files.delete(eq(cgDir)));
+            fm.verify(() -> Fs.writeString(
+                    eq(cgDir + "/cgroup.kill"), eq("1")));
+            fm.verify(() -> Fs.delete(eq(cgDir)));
         }
     }
 
@@ -189,17 +189,17 @@ class CgroupTest {
     void cleanupSkipsEverythingWhenDirectoryDoesNotExist() {
         // No directory -> nothing to kill, nothing to poll, nothing to delete.
         // (Early return short-circuits the cgroup.kill write too.)
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
-            fm.when(() -> Files.exists(any())).thenReturn(false);
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
+            fm.when(() -> Fs.exists(anyString())).thenReturn(false);
             Cgroup.cleanup("/takoyaki-x");
-            fm.verify(() -> Files.delete(any()), never());
-            fm.verify(() -> Files.writeString(any(Path.class), anyString()), never());
+            fm.verify(() -> Fs.delete(anyString()), never());
+            fm.verify(() -> Fs.writeString(anyString(), anyString()), never());
         }
     }
 
     @Test
     void cleanupNullIsNoOp() {
-        try (MockedStatic<Files> fm = mockStatic(Files.class)) {
+        try (MockedStatic<Fs> fm = mockStatic(Fs.class)) {
             Cgroup.cleanup(null);
             fm.verifyNoInteractions();
         }
