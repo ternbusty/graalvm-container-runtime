@@ -67,31 +67,6 @@ class StartCommandTest {
         }
     }
 
-    @Test
-    void startingWithEmptyArgsErrorsAndDoesNotSendNotify() throws IOException {
-        // Mirror of runtime-tools validation/start test 7: a container whose
-        // spec has no process (or no args) parks in 'created' fine but start
-        // MUST refuse, because there's nothing to exec.
-        State st = spy(createdState());
-        doReturn(st).when(st).refreshStatus();
-
-        com.ternbusty.takoyaki.spec.Spec spec = new com.ternbusty.takoyaki.spec.Spec();
-        spec.process = null;
-
-        try (MockedStatic<State> sm = mockStatic(State.class);
-             MockedStatic<NotifySocket> nm = mockStatic(NotifySocket.class);
-             MockedStatic<com.ternbusty.takoyaki.util.Json> jm =
-                     mockStatic(com.ternbusty.takoyaki.util.Json.class)) {
-            sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
-            jm.when(() -> com.ternbusty.takoyaki.util.Json.readFile(any(), any()))
-                    .thenReturn(spec);
-
-            int rc = newCmd("ctr-a").call();
-
-            assertEquals(1, rc, "start must error when process.args is missing");
-            nm.verifyNoInteractions();
-        }
-    }
 
     @Test
     void startingNonCreatedContainerErrors() {

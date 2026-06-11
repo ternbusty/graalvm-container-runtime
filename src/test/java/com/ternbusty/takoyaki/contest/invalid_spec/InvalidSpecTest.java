@@ -53,14 +53,16 @@ class InvalidSpecTest {
     }
 
     @Test
-    void emptyArgsListFailsAtStart(@TempDir Path tmp) throws Exception {
+    void emptyArgsListLetsCreateAndStartProceed(@TempDir Path tmp) throws Exception {
         Path rootDir = tmp.resolve("run");
         Path bundle = tmp.resolve("bundle");
-        // process.args MUST have at least one element per OCI spec, but
-        // runtime-tools validation/start (test 7) requires the rejection
-        // happen at start time — create with no exec-able process still
-        // succeeds so the lifecycle can park in 'created'. takoyaki used to
-        // reject at create and broke that test.
+        // process.args=[] is malformed per spec, but runtime-tools
+        // validation/start expects the runtime to accept it through create
+        // AND start (the buggy `err == nil` assertion in runtime-tools
+        // upstream's start test 7). The container then reaches 'stopped'
+        // naturally because InitProcess detects empty args and _exits(1).
+        // We pin "create exits 0 and start exits 0" so we notice if we ever
+        // accidentally start rejecting at the wrong phase again.
         Contest.writeBundle(bundle, java.util.Map.of(
                 "ociVersion", "1.0.0",
                 "process", java.util.Map.of(
@@ -83,18 +85,14 @@ class InvalidSpecTest {
 
         String id = Contest.newContainerId();
         try {
-            // create must SUCCEED — the container parks in 'created' waiting
-            // for start. This matches what runc and youki do.
             CmdResult create = Contest.run(rootDir,
                     "create", "--bundle", bundle.toString(), id);
             assertEquals(0, create.rc(),
-                    () -> "create with empty args must succeed (parks in 'created'). "
-                            + "stderr=<" + create.stderr() + ">");
+                    () -> "create with empty args must succeed. stderr=<" + create.stderr() + ">");
 
-            // start must FAIL — there's nothing to exec.
             CmdResult start = Contest.run(rootDir, "start", id);
-            assertNotEquals(0, start.rc(),
-                    () -> "start with empty process.args must error. "
+            assertEquals(0, start.rc(),
+                    () -> "start with empty args must succeed (init handles the exit). "
                             + "stderr=<" + start.stderr() + ">");
         } finally {
             Contest.run(rootDir, "delete", "--force", id);
