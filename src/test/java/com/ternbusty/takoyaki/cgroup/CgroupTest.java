@@ -166,26 +166,22 @@ class CgroupTest {
 
     @Test
     void cleanupRemovesDirectoryWhenItExists() {
-        // The new cleanup path is: cgroup.kill -> poll cgroup.procs until blank
-        // -> rmdir. We mock readString to return an empty body so the polling
-        // loop exits on the first iteration; writeString to succeed silently.
+        // The cleanup path is: write '1' to cgroup.kill -> retry rmdir until
+        // it succeeds (or the deadline). On the happy path Files.delete
+        // succeeds on the first attempt.
         try (MockedStatic<Files> fm = mockStatic(Files.class)) {
             Path cgDir = Path.of("/sys/fs/cgroup/takoyaki-x");
             fm.when(() -> Files.exists(eq(cgDir))).thenReturn(true);
-            fm.when(() -> Files.readString(eq(cgDir.resolve("cgroup.procs"))))
-                    .thenReturn("");
-            // writeString is a void-returning overload in Files; stub it to no-op
-            // so the cgroup.kill write doesn't throw and short-circuit cleanup.
             fm.when(() -> Files.writeString(any(Path.class), anyString()))
                     .thenReturn(cgDir);
+            // Files.delete returns void; the default (no stub) is to do nothing
+            // and return successfully, which matches the happy path.
 
             Cgroup.cleanup("/takoyaki-x");
 
-            // The whole point of cleanup: rmdir the leaf cgroup directory.
-            fm.verify(() -> Files.delete(eq(cgDir)));
-            // The cgroup v2 fast-path also wrote "1" to cgroup.kill.
             fm.verify(() -> Files.writeString(
                     eq(cgDir.resolve("cgroup.kill")), eq("1")));
+            fm.verify(() -> Files.delete(eq(cgDir)));
         }
     }
 
