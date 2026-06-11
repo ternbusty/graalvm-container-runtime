@@ -1,0 +1,2 @@
+# Populated rootfs trees are stage output, not source.
+*/rootfs/

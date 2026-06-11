@@ -1,0 +1,21 @@
+{
+  "ociVersion": "1.0.0",
+  "process": {
+    "terminal": false,
+    "args": ["/bin/busybox", "true"],
+    "cwd": "/",
+    "user": { "uid": 0, "gid": 0 }
+  },
+  "root": {
+    "path": "rootfs"
+  },
+  "linux": {
+    "namespaces": [
+      { "type": "pid" },
+      { "type": "mount" },
+      { "type": "ipc" },
+      { "type": "uts" },
+      { "type": "cgroup" }
+    ]
+  }
+}
