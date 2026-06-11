@@ -134,4 +134,80 @@ public final class Contest {
         String err = new String(p.getErrorStream().readAllBytes());
         return new CmdResult(p.exitValue(), out, err);
     }
+
+    // ---- busybox rootfs (for scenarios that actually start the container) --
+
+    /**
+     * Stage a minimal rootfs at {@code rootfs/} populated with busybox + a
+     * few common applet symlinks (sh, sleep, true, false, cat, echo).
+     *
+     * Returns the absolute path to the rootfs on success. Returns {@code null}
+     * if busybox can't be found on the host — callers should treat that as
+     * "skip" via {@link org.junit.jupiter.api.Assumptions#assumeTrue}.
+     *
+     * busybox must be a fully static binary (no shared library dependencies)
+     * because the container's rootfs has no /lib once we pivot into it. The
+     * Debian/Ubuntu {@code busybox-static} package or the upstream prebuilt
+     * binary both satisfy this.
+     */
+    public static Path stageBusyboxRootfs(Path rootfs) throws IOException {
+        Path busybox = locateBusybox();
+        if (busybox == null) return null;
+
+        Path bin = rootfs.resolve("bin");
+        Files.createDirectories(bin);
+        Path bbCopy = bin.resolve("busybox");
+        Files.copy(busybox, bbCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        // chmod +x — Files.copy preserves mode on most filesystems but not all.
+        bbCopy.toFile().setExecutable(true, false);
+
+        for (String applet : List.of("sh", "sleep", "true", "false", "cat", "echo", "ls")) {
+            Path link = bin.resolve(applet);
+            try {
+                Files.createSymbolicLink(link, Path.of("busybox"));
+            } catch (java.nio.file.FileAlreadyExistsException ignored) {}
+        }
+        return rootfs;
+    }
+
+    private static Path locateBusybox() {
+        // The container needs a STATIC busybox so it can run inside a rootfs
+        // with no /lib mounted. Prefer the explicitly-static variant if it's
+        // installed (apt-get install busybox-static), then fall back to the
+        // regular path which is also static on Debian/Ubuntu.
+        for (String candidate : List.of(
+                "/bin/busybox-static",
+                "/usr/bin/busybox-static",
+                "/bin/busybox",
+                "/usr/bin/busybox")) {
+            Path p = Path.of(candidate);
+            if (Files.isExecutable(p)) return p;
+        }
+        return null;
+    }
+
+    // ---- state polling -----------------------------------------------------
+
+    /**
+     * Poll {@code takoyaki state} until the JSON contains
+     * {@code "status":"<expected>"} or until the deadline elapses. Returns
+     * true if the expected status appears in time, false otherwise. Useful
+     * for "after start, state must reflect running" assertions where the
+     * state machine takes a tick or two to settle.
+     */
+    public static boolean waitForStatus(Path rootDir, String id, String expected,
+                                        long timeoutMs) throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        // Match both "status":"running" AND "status" : "running" — Jackson's
+        // pretty printer (default) inserts spaces around the colon, while
+        // the compact form doesn't. Either is valid JSON.
+        java.util.regex.Pattern pat = java.util.regex.Pattern.compile(
+                "\"status\"\\s*:\\s*\"" + java.util.regex.Pattern.quote(expected) + "\"");
+        while (System.nanoTime() < deadline) {
+            CmdResult r = run(rootDir, "state", id);
+            if (r.ok() && pat.matcher(r.stdout()).find()) return true;
+            Thread.sleep(50);
+        }
+        return false;
+    }
 }
