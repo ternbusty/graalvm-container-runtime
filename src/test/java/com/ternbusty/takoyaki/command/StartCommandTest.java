@@ -42,15 +42,20 @@ class StartCommandTest {
         doNothing().when(updated).save(anyString());
         doReturn(updated).when(st).withStatus(ContainerStatus.RUNNING);
 
+        // Build a Spec with non-empty process.args. StartCommand validates
+        // that process.args isn't empty before signalling — without this,
+        // start refuses with "spec.process.args is missing or empty".
+        com.ternbusty.takoyaki.spec.Spec spec = new com.ternbusty.takoyaki.spec.Spec();
+        spec.process = new com.ternbusty.takoyaki.spec.Spec.Process();
+        spec.process.args = java.util.List.of("/bin/true");
+
         try (MockedStatic<State> sm = mockStatic(State.class);
              MockedStatic<NotifySocket> nm = mockStatic(NotifySocket.class);
              MockedStatic<com.ternbusty.takoyaki.util.Json> jm =
                      mockStatic(com.ternbusty.takoyaki.util.Json.class)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
-            // Spec read fails, but StartCommand swallows that (it is only
-            // needed for the optional poststart hook).
             jm.when(() -> com.ternbusty.takoyaki.util.Json.readFile(any(), any()))
-                    .thenThrow(new IOException("spec gone"));
+                    .thenReturn(spec);
 
             int rc = newCmd("ctr-a").call();
 
@@ -59,6 +64,32 @@ class StartCommandTest {
             // unix domain socket — verify it fired with the canonical path.
             nm.verify(() -> NotifySocket.sendStart(eq("/tmp/takoyaki-ctr-a.sock")));
             verify(updated, times(1)).save(eq("/run/takoyaki"));
+        }
+    }
+
+    @Test
+    void startingWithEmptyArgsErrorsAndDoesNotSendNotify() throws IOException {
+        // Mirror of runtime-tools validation/start test 7: a container whose
+        // spec has no process (or no args) parks in 'created' fine but start
+        // MUST refuse, because there's nothing to exec.
+        State st = spy(createdState());
+        doReturn(st).when(st).refreshStatus();
+
+        com.ternbusty.takoyaki.spec.Spec spec = new com.ternbusty.takoyaki.spec.Spec();
+        spec.process = null;
+
+        try (MockedStatic<State> sm = mockStatic(State.class);
+             MockedStatic<NotifySocket> nm = mockStatic(NotifySocket.class);
+             MockedStatic<com.ternbusty.takoyaki.util.Json> jm =
+                     mockStatic(com.ternbusty.takoyaki.util.Json.class)) {
+            sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
+            jm.when(() -> com.ternbusty.takoyaki.util.Json.readFile(any(), any()))
+                    .thenReturn(spec);
+
+            int rc = newCmd("ctr-a").call();
+
+            assertEquals(1, rc, "start must error when process.args is missing");
+            nm.verifyNoInteractions();
         }
     }
 

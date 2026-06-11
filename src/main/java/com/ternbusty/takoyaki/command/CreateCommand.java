@@ -82,15 +82,11 @@ public final class CreateCommand implements Callable<Integer> {
             return 1;
         }
 
-        // process.args MUST be non-empty per the OCI spec. Catching this here
-        // means a malformed config errors at create time instead of leaving
-        // the init process parked waiting for a start that will then fail
-        // mysteriously. youki and runc both reject this at create.
-        if (spec.process == null || spec.process.args == null
-                || spec.process.args.isEmpty()) {
-            Logger.error("invalid spec: process.args must be a non-empty array");
-            return 1;
-        }
+        // Note on process.args validation: runtime-tools' validation/start
+        // test 7 sets spec.process = nil and expects create to SUCCEED and
+        // start to return an error (the spec is ambiguous on which phase
+        // validates, but the conformance suite settles it). We therefore
+        // defer this check to StartCommand below.
 
         String rootfsPath = spec.root.path.startsWith("/")
                 ? spec.root.path

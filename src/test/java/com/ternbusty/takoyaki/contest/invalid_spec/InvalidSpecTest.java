@@ -53,11 +53,14 @@ class InvalidSpecTest {
     }
 
     @Test
-    void emptyArgsListFailsCreate(@TempDir Path tmp) throws Exception {
+    void emptyArgsListFailsAtStart(@TempDir Path tmp) throws Exception {
         Path rootDir = tmp.resolve("run");
         Path bundle = tmp.resolve("bundle");
-        // process.args MUST have at least one element per OCI spec — there has
-        // to be SOMETHING to exec. An empty array is a malformed spec.
+        // process.args MUST have at least one element per OCI spec, but
+        // runtime-tools validation/start (test 7) requires the rejection
+        // happen at start time — create with no exec-able process still
+        // succeeds so the lifecycle can park in 'created'. takoyaki used to
+        // reject at create and broke that test.
         Contest.writeBundle(bundle, java.util.Map.of(
                 "ociVersion", "1.0.0",
                 "process", java.util.Map.of(
@@ -79,13 +82,22 @@ class InvalidSpecTest {
         ));
 
         String id = Contest.newContainerId();
-        CmdResult r = Contest.run(rootDir,
-                "create", "--bundle", bundle.toString(), id);
+        try {
+            // create must SUCCEED — the container parks in 'created' waiting
+            // for start. This matches what runc and youki do.
+            CmdResult create = Contest.run(rootDir,
+                    "create", "--bundle", bundle.toString(), id);
+            assertEquals(0, create.rc(),
+                    () -> "create with empty args must succeed (parks in 'created'). "
+                            + "stderr=<" + create.stderr() + ">");
 
-        assertNotEquals(0, r.rc(),
-                () -> "empty process.args must error at create or start time. "
-                        + "stderr=<" + r.stderr() + ">");
-
-        Contest.run(rootDir, "delete", "--force", id);
+            // start must FAIL — there's nothing to exec.
+            CmdResult start = Contest.run(rootDir, "start", id);
+            assertNotEquals(0, start.rc(),
+                    () -> "start with empty process.args must error. "
+                            + "stderr=<" + start.stderr() + ">");
+        } finally {
+            Contest.run(rootDir, "delete", "--force", id);
+        }
     }
 }
