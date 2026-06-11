@@ -4,42 +4,27 @@ import com.ternbusty.takoyaki.config.KontainerConfig;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.util.Json;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
-@Command(name = "ps", description = "List processes in a container")
-public final class PsCommand implements Callable<Integer> {
-    @ParentCommand
-    TakoyakiRoot root;
+public final class PsCommand {
+    private PsCommand() {}
 
-    @Option(names = {"-f", "--format"}, defaultValue = "table",
-            description = "Output format (table or json)")
-    String format;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId, String format) {
         State state;
         try {
-            state = State.load(root.rootPath, containerId).refreshStatus();
+            state = State.load(rootPath, containerId).refreshStatus();
         } catch (Exception e) {
             Logger.error("failed to load state: " + e.getMessage());
             return 1;
         }
         String cgroupPath = null;
         try {
-            cgroupPath = KontainerConfig.load(root.rootPath, containerId).cgroupPath;
+            cgroupPath = KontainerConfig.load(rootPath, containerId).cgroupPath;
         } catch (IOException ignored) {}
 
         List<Integer> pids = new ArrayList<>();

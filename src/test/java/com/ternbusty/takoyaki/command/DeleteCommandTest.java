@@ -15,14 +15,7 @@ import static org.mockito.Mockito.*;
 
 class DeleteCommandTest {
 
-    private DeleteCommand newCmd(String id, boolean force) {
-        DeleteCommand c = new DeleteCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = "/run/takoyaki";
-        c.containerId = id;
-        c.force = force;
-        return c;
-    }
+    private static final String ROOT = "/run/takoyaki";
 
     private State stoppedState() {
         State s = new State();
@@ -46,7 +39,7 @@ class DeleteCommandTest {
     void deletingMissingContainerWithoutForceErrors() {
         try (MockedStatic<State> sm = mockStatic(State.class)) {
             sm.when(() -> State.exists(anyString(), anyString())).thenReturn(false);
-            int rc = newCmd("missing", false).call();
+            int rc = DeleteCommand.run(ROOT, "missing", false);
             assertEquals(1, rc);
         }
     }
@@ -57,7 +50,7 @@ class DeleteCommandTest {
         // scripts that always run `delete --force` don't trip.
         try (MockedStatic<State> sm = mockStatic(State.class)) {
             sm.when(() -> State.exists(anyString(), anyString())).thenReturn(false);
-            int rc = newCmd("missing", true).call();
+            int rc = DeleteCommand.run(ROOT, "missing", true);
             assertEquals(0, rc);
         }
     }
@@ -72,7 +65,7 @@ class DeleteCommandTest {
             sm.when(() -> State.exists(anyString(), anyString())).thenReturn(true);
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", false).call();
+            int rc = DeleteCommand.run(ROOT, "ctr-a", false);
 
             assertEquals(1, rc, "OCI: delete on non-stopped MUST error without --force");
             lm.verify(() -> Libc.kill(anyInt(), anyInt()), never());
@@ -92,7 +85,7 @@ class DeleteCommandTest {
                     .thenReturn(java.nio.file.Path.of("/tmp/nonexistent-container-dir"));
             lm.when(() -> Libc.kill(anyInt(), anyInt())).thenReturn(0);
 
-            int rc = newCmd("ctr-a", true).call();
+            int rc = DeleteCommand.run(ROOT, "ctr-a", true);
 
             assertEquals(0, rc);
             lm.verify(() -> Libc.kill(eq(4242), eq(Constants.SIGKILL)));
@@ -111,7 +104,7 @@ class DeleteCommandTest {
             sm.when(() -> State.containerDir(anyString(), anyString()))
                     .thenReturn(java.nio.file.Path.of("/tmp/nonexistent-container-dir"));
 
-            int rc = newCmd("ctr-a", false).call();
+            int rc = DeleteCommand.run(ROOT, "ctr-a", false);
 
             assertEquals(0, rc);
             // No kill should be issued — container is already stopped.
@@ -126,7 +119,7 @@ class DeleteCommandTest {
             sm.when(() -> State.load(anyString(), anyString()))
                     .thenThrow(new IOException("corrupt"));
 
-            int rc = newCmd("ctr-a", false).call();
+            int rc = DeleteCommand.run(ROOT, "ctr-a", false);
 
             assertEquals(1, rc);
         }

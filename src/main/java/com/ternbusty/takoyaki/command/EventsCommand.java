@@ -3,10 +3,6 @@ package com.ternbusty.takoyaki.command;
 import com.ternbusty.takoyaki.config.KontainerConfig;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.util.Json;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,30 +10,18 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 /**
  * Stream resource-usage statistics from the container's cgroup. Without --stats we
  * fall through to a polling loop similar to `runc events`. The format is JSON Lines.
  */
-@Command(name = "events", description = "Display container events such as OOM and memory pressure")
-public final class EventsCommand implements Callable<Integer> {
-    @ParentCommand TakoyakiRoot root;
+public final class EventsCommand {
+    private EventsCommand() {}
 
-    @Option(names = "--stats", description = "Print one snapshot of stats then exit")
-    boolean once;
-
-    @Option(names = "--interval", defaultValue = "5", description = "Polling interval in seconds")
-    int intervalSec;
-
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId, boolean once, int intervalSec) {
         String cgroupPath;
         try {
-            cgroupPath = KontainerConfig.load(root.rootPath, containerId).cgroupPath;
+            cgroupPath = KontainerConfig.load(rootPath, containerId).cgroupPath;
         } catch (IOException e) {
             Logger.error("no cgroup recorded: " + e.getMessage());
             return 1;

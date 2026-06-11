@@ -7,26 +7,16 @@ import com.ternbusty.takoyaki.spec.Spec;
 import com.ternbusty.takoyaki.state.ContainerStatus;
 import com.ternbusty.takoyaki.state.State;
 import com.ternbusty.takoyaki.util.Json;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.ParentCommand;
 
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
 
-@Command(name = "start", description = "Start a created container")
-public final class StartCommand implements Callable<Integer> {
-    @ParentCommand
-    TakoyakiRoot root;
+public final class StartCommand {
+    private StartCommand() {}
 
-    @Parameters(index = "0", description = "Container ID")
-    String containerId;
-
-    @Override
-    public Integer call() {
+    public static int run(String rootPath, String containerId) {
         State state;
         try {
-            state = State.load(root.rootPath, containerId).refreshStatus();
+            state = State.load(rootPath, containerId).refreshStatus();
         } catch (Exception e) {
             Logger.error("failed to load state: " + e.getMessage());
             return 1;
@@ -52,7 +42,7 @@ public final class StartCommand implements Callable<Integer> {
         try {
             NotifySocket.sendStart("/tmp/takoyaki-" + containerId + ".sock");
             State updated = state.withStatus(ContainerStatus.RUNNING);
-            updated.save(root.rootPath);
+            updated.save(rootPath);
             Logger.info("container " + containerId + " started");
 
             // poststart hook runs in the runtime namespace after the user process is started.

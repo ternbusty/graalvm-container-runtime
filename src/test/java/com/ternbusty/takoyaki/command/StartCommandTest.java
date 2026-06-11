@@ -14,13 +14,7 @@ import static org.mockito.Mockito.*;
 
 class StartCommandTest {
 
-    private StartCommand newCmd(String id) {
-        StartCommand c = new StartCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = "/run/takoyaki";
-        c.containerId = id;
-        return c;
-    }
+    private static final String ROOT = "/run/takoyaki";
 
     private State createdState() {
         State s = new State();
@@ -57,7 +51,7 @@ class StartCommandTest {
             jm.when(() -> com.ternbusty.takoyaki.util.Json.readFile(any(), any()))
                     .thenReturn(spec);
 
-            int rc = newCmd("ctr-a").call();
+            int rc = StartCommand.run(ROOT, "ctr-a");
 
             assertEquals(0, rc);
             // NotifySocket.sendStart is the actual "go" signal across the
@@ -78,7 +72,7 @@ class StartCommandTest {
              MockedStatic<NotifySocket> nm = mockStatic(NotifySocket.class)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a").call();
+            int rc = StartCommand.run(ROOT, "ctr-a");
 
             assertEquals(1, rc, "OCI: start only valid on a 'created' container");
             // No "go" signal should have been sent.
@@ -92,7 +86,7 @@ class StartCommandTest {
             sm.when(() -> State.load(anyString(), anyString()))
                     .thenThrow(new IOException("corrupt"));
 
-            int rc = newCmd("ctr-a").call();
+            int rc = StartCommand.run(ROOT, "ctr-a");
 
             assertEquals(1, rc);
         }

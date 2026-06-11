@@ -16,21 +16,14 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Drives the full {@link KillCommand#call} method with {@link State#load}
+ * Drives the full {@link KillCommand#run} method with {@link State#load}
  * mocked and kill(2) routed through the Syscalls trait fake. We exercise the
  * actual control flow (state load -> status check -> pid presence -> signal
  * parse -> kill -> ESRCH tolerance) without touching the real OS.
  */
 class KillCommandCallTest {
 
-    private KillCommand newCmd(String id, String sig) {
-        KillCommand c = new KillCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = "/run/takoyaki";
-        c.containerId = id;
-        c.signal = sig;
-        return c;
-    }
+    private static final String ROOT = "/run/takoyaki";
 
     /** Build a State with the given status+pid without touching disk. */
     private State runningState(int pid) {
@@ -50,9 +43,9 @@ class KillCommandCallTest {
         RecordingSyscalls rec = new RecordingSyscalls();
         try (MockedStatic<State> sm = mockStatic(State.class);
              var scope = SyscallHost.install(rec)) {
-            sm.when(() -> State.load("/run/takoyaki", "ctr-a")).thenReturn(st);
+            sm.when(() -> State.load(ROOT, "ctr-a")).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "SIGTERM").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "SIGTERM");
 
             assertEquals(0, rc);
             assertEquals(List.of(new KillCall(4242, Constants.SIGTERM)),
@@ -71,7 +64,7 @@ class KillCommandCallTest {
              var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "KILL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "KILL");
 
             assertEquals(1, rc, "OCI spec: kill on stopped MUST error");
             assertTrue(rec.killCalls().isEmpty(),
@@ -94,7 +87,7 @@ class KillCommandCallTest {
              var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "KILL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "KILL");
 
             assertEquals(0, rc, "ESRCH from kill(2) must NOT propagate as a runtime error");
             assertEquals(1, rec.killCalls().size());
@@ -114,7 +107,7 @@ class KillCommandCallTest {
              var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "KILL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "KILL");
 
             assertEquals(1, rc, "non-ESRCH kill errors must surface as exit 1");
         }
@@ -130,7 +123,7 @@ class KillCommandCallTest {
              var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "TOTALLY_NOT_A_SIGNAL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "TOTALLY_NOT_A_SIGNAL");
 
             assertEquals(1, rc);
             assertTrue(rec.killCalls().isEmpty());
@@ -148,7 +141,7 @@ class KillCommandCallTest {
              var scope = SyscallHost.install(rec)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
 
-            int rc = newCmd("ctr-a", "KILL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "KILL");
 
             assertEquals(1, rc);
             assertTrue(rec.killCalls().isEmpty());
@@ -163,7 +156,7 @@ class KillCommandCallTest {
             sm.when(() -> State.load(anyString(), anyString()))
                     .thenThrow(new java.io.IOException("no state.json"));
 
-            int rc = newCmd("ctr-a", "KILL").call();
+            int rc = KillCommand.run(ROOT, "ctr-a", "KILL");
 
             assertEquals(1, rc);
             assertTrue(rec.killCalls().isEmpty());

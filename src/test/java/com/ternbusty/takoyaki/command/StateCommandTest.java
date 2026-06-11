@@ -16,6 +16,8 @@ import static org.mockito.Mockito.*;
 
 class StateCommandTest {
 
+    private static final String ROOT = "/run/takoyaki";
+
     private final PrintStream realStdout = System.out;
     private ByteArrayOutputStream capturedStdout;
 
@@ -28,14 +30,6 @@ class StateCommandTest {
     @AfterEach
     void restoreStdout() {
         System.setOut(realStdout);
-    }
-
-    private StateCommand newCmd(String id) {
-        StateCommand c = new StateCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = "/run/takoyaki";
-        c.containerId = id;
-        return c;
     }
 
     private State sampleState() {
@@ -56,7 +50,7 @@ class StateCommandTest {
         try (MockedStatic<State> sm = mockStatic(State.class)) {
             sm.when(() -> State.load("/run/takoyaki", "ctr-a")).thenReturn(st);
 
-            int rc = newCmd("ctr-a").call();
+            int rc = StateCommand.run(ROOT, "ctr-a");
 
             assertEquals(0, rc);
             String out = capturedStdout.toString();
@@ -77,7 +71,7 @@ class StateCommandTest {
             sm.when(() -> State.load(anyString(), anyString()))
                     .thenThrow(new java.io.IOException("no such container"));
 
-            int rc = newCmd("missing").call();
+            int rc = StateCommand.run(ROOT, "missing");
 
             assertEquals(1, rc);
             assertEquals("", capturedStdout.toString(),
@@ -96,7 +90,7 @@ class StateCommandTest {
 
         try (MockedStatic<State> sm = mockStatic(State.class)) {
             sm.when(() -> State.load(anyString(), anyString())).thenReturn(st);
-            newCmd("ctr-a").call();
+            StateCommand.run(ROOT, "ctr-a");
             verify(st, times(1)).refreshStatus();
         }
     }

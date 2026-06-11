@@ -10,6 +10,13 @@
 #include <sys/prctl.h>
 #include <sched.h>
 #include <sys/syscall.h>
+#include <time.h>
+
+/* Earliest possible startup timestamp. Set in the constructor below.
+ * Java side reads this via takoyaki_get_t0_ns() to compute "ms from
+ * constructor entry to Java main()". */
+static struct timespec t0_constructor;
+static int t0_set = 0;
 
 #ifndef CLONE_NEWUSER
 #define CLONE_NEWUSER 0x10000000
@@ -43,8 +50,6 @@
 #define ENV_SYNCPIPE "_TAKOYAKI_SYNCPIPE"
 #define ENV_CLONE_FLAGS "_TAKOYAKI_CLONE_FLAGS"
 #define ENV_DEBUG "_TAKOYAKI_BOOTSTRAP_DEBUG"
-
-static int is_init_process = 0;
 
 enum sync_t {
     SYNC_USERMAP_PLS = 0x40,
@@ -136,6 +141,20 @@ void takoyaki_bootstrap(void) {
     pid_t stage2_pid = -1;
     enum sync_t s;
     unsigned int clone_flags;
+
+    /* Stamp the earliest reachable timestamp. The constructor runs from the
+     * dynamic linker's init_array before main(), so this captures everything
+     * the loader, libc, glibc relocation, and SubstrateVM heap mapping cost
+     * us. When _TAKOYAKI_TRACE_STARTUP=1 we also dump the value so the Java
+     * trace block can subtract it from System.nanoTime() at main() entry. */
+    if (!t0_set) {
+        clock_gettime(CLOCK_MONOTONIC, &t0_constructor);
+        t0_set = 1;
+        if (getenv("_TAKOYAKI_TRACE_STARTUP")) {
+            long ns = (long) t0_constructor.tv_sec * 1000000000L + (long) t0_constructor.tv_nsec;
+            fprintf(stderr, "[trace] CTOR raw monotonic ns     : %ld\n", ns);
+        }
+    }
 
     if (!getenv(ENV_IS_BOOTSTRAP)) {
         return;
@@ -418,7 +437,3 @@ void takoyaki_bootstrap(void) {
     _exit(0);
 }
 
-__attribute__((visibility("default")))
-int takoyaki_is_init_process(void) {
-    return is_init_process;
-}

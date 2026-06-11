@@ -18,20 +18,13 @@ import static org.mockito.Mockito.*;
 
 class UpdateCommandTest {
 
-    private static UpdateCommand newCmd(String rootPath, String id) {
-        UpdateCommand c = new UpdateCommand();
-        c.root = new TakoyakiRoot();
-        c.root.rootPath = rootPath;
-        c.containerId = id;
-        return c;
-    }
-
     @Test
     void returnsErrorWhenNoKontainerConfigExists(@TempDir Path tmp) {
         // update against an unknown id must NOT silently succeed — Cgroup
         // wouldn't know where to write. We surface non-zero.
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            int rc = newCmd(tmp.toString(), "absent").call();
+            int rc = UpdateCommand.run(tmp.toString(), "absent",
+                    null, null, null, null, null, null);
             assertEquals(1, rc);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(),
                     any(Spec.LinuxResources.class)), never());
@@ -42,7 +35,8 @@ class UpdateCommandTest {
     void returnsErrorWhenConfigHasNullCgroupPath(@TempDir Path tmp) throws IOException {
         new KontainerConfig(null).save(tmp.toString(), "no-cgroup");
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            int rc = newCmd(tmp.toString(), "no-cgroup").call();
+            int rc = UpdateCommand.run(tmp.toString(), "no-cgroup",
+                    null, null, null, null, null, null);
             assertEquals(1, rc);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(),
                     any(Spec.LinuxResources.class)), never());
@@ -54,11 +48,9 @@ class UpdateCommandTest {
         new KontainerConfig("/sys/fs/cgroup/user.slice/x")
                 .save(tmp.toString(), "ctr");
 
-        UpdateCommand c = newCmd(tmp.toString(), "ctr");
-        c.memory = 256L * 1024 * 1024;
-
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            int rc = c.call();
+            int rc = UpdateCommand.run(tmp.toString(), "ctr",
+                    null, 256L * 1024 * 1024, null, null, null, null);
             assertEquals(0, rc);
             ArgumentCaptor<Spec.LinuxResources> arg =
                     ArgumentCaptor.forClass(Spec.LinuxResources.class);
@@ -78,13 +70,10 @@ class UpdateCommandTest {
     void cpuFlagsAllPopulateCpuBlock(@TempDir Path tmp) throws IOException {
         new KontainerConfig("/sys/fs/cgroup/x").save(tmp.toString(), "ctr");
 
-        UpdateCommand c = newCmd(tmp.toString(), "ctr");
-        c.cpuQuota  = 50000L;
-        c.cpuPeriod = 100000L;
-        c.cpuShares = 1024L;
-
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            assertEquals(0, c.call());
+            int rc = UpdateCommand.run(tmp.toString(), "ctr",
+                    null, null, 50000L, 100000L, 1024L, null);
+            assertEquals(0, rc);
             ArgumentCaptor<Spec.LinuxResources> arg =
                     ArgumentCaptor.forClass(Spec.LinuxResources.class);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(), arg.capture()));
@@ -103,11 +92,10 @@ class UpdateCommandTest {
     void pidsLimitFlagPopulatesPidsBlock(@TempDir Path tmp) throws IOException {
         new KontainerConfig("/sys/fs/cgroup/x").save(tmp.toString(), "ctr");
 
-        UpdateCommand c = newCmd(tmp.toString(), "ctr");
-        c.pidsLimit = 512L;
-
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            assertEquals(0, c.call());
+            int rc = UpdateCommand.run(tmp.toString(), "ctr",
+                    null, null, null, null, null, 512L);
+            assertEquals(0, rc);
             ArgumentCaptor<Spec.LinuxResources> arg =
                     ArgumentCaptor.forClass(Spec.LinuxResources.class);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(), arg.capture()));
@@ -124,12 +112,10 @@ class UpdateCommandTest {
         Path res = tmp.resolve("resources.json");
         Files.writeString(res, "{\"memory\":{\"limit\":100},\"pids\":{\"limit\":42}}");
 
-        UpdateCommand c = newCmd(tmp.toString(), "ctr");
-        c.resourcesPath = res.toString();
-        c.memory = 999L; // override file's 100
-
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            assertEquals(0, c.call());
+            int rc = UpdateCommand.run(tmp.toString(), "ctr",
+                    res.toString(), 999L, null, null, null, null);
+            assertEquals(0, rc);
             ArgumentCaptor<Spec.LinuxResources> arg =
                     ArgumentCaptor.forClass(Spec.LinuxResources.class);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(), arg.capture()));
@@ -144,11 +130,12 @@ class UpdateCommandTest {
     @Test
     void invalidResourcesFileReturnsErrorAndDoesNotApply(@TempDir Path tmp) throws IOException {
         new KontainerConfig("/sys/fs/cgroup/x").save(tmp.toString(), "ctr");
-        UpdateCommand c = newCmd(tmp.toString(), "ctr");
-        c.resourcesPath = tmp.resolve("does-not-exist.json").toString();
 
         try (MockedStatic<Cgroup> cm = mockStatic(Cgroup.class)) {
-            assertEquals(1, c.call());
+            int rc = UpdateCommand.run(tmp.toString(), "ctr",
+                    tmp.resolve("does-not-exist.json").toString(),
+                    null, null, null, null, null);
+            assertEquals(1, rc);
             cm.verify(() -> Cgroup.applyLimitsOnly(anyString(),
                     any(Spec.LinuxResources.class)), never());
         }
