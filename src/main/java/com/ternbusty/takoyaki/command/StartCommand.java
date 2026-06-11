@@ -27,7 +27,7 @@ public final class StartCommand {
         }
         Spec spec = null;
         try {
-            spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec.class);
+            spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec::fromJson);
         } catch (Exception e) {
             Logger.debug("could not reload spec for hooks: " + e.getMessage());
         }

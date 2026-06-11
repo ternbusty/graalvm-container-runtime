@@ -40,7 +40,7 @@ public final class CreateCommand {
 
         Spec spec;
         try {
-            spec = Json.readFile(Path.of(bundle, "config.json"), Spec.class);
+            spec = Json.readFile(Path.of(bundle, "config.json"), Spec::fromJson);
         } catch (Exception e) {
             Logger.error("failed to load config.json: " + e.getMessage());
             return 1;

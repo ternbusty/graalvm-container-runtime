@@ -60,7 +60,7 @@ public final class DeleteCommand {
 
         // poststop hook fires in the runtime namespace before we remove the state dir.
         try {
-            Spec spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec.class);
+            Spec spec = Json.readFile(Path.of(state.bundle, "config.json"), Spec::fromJson);
             if (spec.hooks != null) Hooks.run(spec.hooks.poststop, state, "poststop");
         } catch (IOException ignored) {
             // bundle may already be gone for stopped containers; skip silently

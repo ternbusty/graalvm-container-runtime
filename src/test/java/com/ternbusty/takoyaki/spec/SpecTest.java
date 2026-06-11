@@ -19,7 +19,7 @@ class SpecTest {
                   }
                 }
                 """;
-        Spec spec = Json.decode(json, Spec.class);
+        Spec spec = Json.decode(json, Spec::fromJson);
         assertEquals("1.0.0", spec.ociVersion);
         assertEquals("rootfs", spec.root.path);
         assertEquals(3, spec.process.args.size());
@@ -39,7 +39,7 @@ class SpecTest {
                   "unknown": "garbage"
                 }
                 """;
-        Spec spec = Json.decode(json, Spec.class);
+        Spec spec = Json.decode(json, Spec::fromJson);
         assertEquals("1.2.0", spec.ociVersion);
     }
 
@@ -82,7 +82,7 @@ class SpecTest {
                   }
                 }
                 """;
-        Spec spec = Json.decode(json, Spec.class);
+        Spec spec = Json.decode(json, Spec::fromJson);
         assertNotNull(spec.process.capabilities);
         assertEquals(2, spec.process.capabilities.bounding.size());
         assertTrue(spec.process.capabilities.bounding.contains("CAP_KILL"));
@@ -106,7 +106,7 @@ class SpecTest {
                   }]
                 }
                 """;
-        Spec spec = Json.decode(json, Spec.class);
+        Spec spec = Json.decode(json, Spec::fromJson);
         assertEquals(1, spec.mounts.size());
         Spec.Mount m = spec.mounts.get(0);
         assertEquals("/idmap", m.destination);

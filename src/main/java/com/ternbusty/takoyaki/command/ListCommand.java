@@ -40,7 +40,7 @@ public final class ListCommand {
             return 0;
         }
         if ("json".equals(format)) {
-            System.out.println(Json.encode(states));
+            System.out.println(Json.encode(states.stream().map(State::toJson).toList()));
             return 0;
         }
         System.out.printf("%-30s %-8s %-10s %-20s %s%n", "ID", "PID", "STATUS", "CREATED", "BUNDLE");

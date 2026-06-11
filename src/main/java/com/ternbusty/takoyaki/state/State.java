@@ -1,8 +1,8 @@
 package com.ternbusty.takoyaki.state;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ternbusty.takoyaki.logger.Logger;
 import com.ternbusty.takoyaki.util.Json;
+import com.ternbusty.takoyaki.util.json.JsonMap;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +12,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public final class State {
     public String ociVersion;
     public String id;
@@ -58,7 +57,7 @@ public final class State {
     public static State load(String rootPath, String containerId) throws IOException {
         Path p = statePath(rootPath, containerId);
         Logger.debug("loading state from " + p);
-        return Json.readFile(p, State.class);
+        return Json.readFile(p, State::fromJson);
     }
 
     public void save(String rootPath) throws IOException {
@@ -66,7 +65,7 @@ public final class State {
         Files.createDirectories(dir);
         Path p = dir.resolve("state.json");
         Logger.debug("saving state to " + p);
-        Json.writeFile(p, this);
+        Json.writeFile(p, toJson());
     }
 
     public static State create(String ociVersion, String containerId,
@@ -99,5 +98,31 @@ public final class State {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    public static State fromJson(Object node) {
+        if (node == null) return null;
+        Map<String, Object> o = JsonMap.asObject(node);
+        State s = new State();
+        s.ociVersion = JsonMap.str(o, "ociVersion");
+        s.id = JsonMap.str(o, "id");
+        s.status = JsonMap.str(o, "status");
+        s.pid = JsonMap.intBoxed(o, "pid");
+        s.bundle = JsonMap.str(o, "bundle");
+        s.annotations = JsonMap.strMap(o, "annotations");
+        s.created = JsonMap.str(o, "created");
+        return s;
+    }
+
+    public Object toJson() {
+        Map<String, Object> o = JsonMap.obj();
+        JsonMap.put(o, "ociVersion", ociVersion);
+        JsonMap.put(o, "id", id);
+        JsonMap.put(o, "status", status);
+        JsonMap.put(o, "pid", pid);
+        JsonMap.put(o, "bundle", bundle);
+        JsonMap.put(o, "annotations", annotations);
+        JsonMap.put(o, "created", created);
+        return o;
     }
 }

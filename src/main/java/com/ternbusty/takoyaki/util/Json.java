@@ -1,42 +1,41 @@
 package com.ternbusty.takoyaki.util;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.ternbusty.takoyaki.util.json.JsonParser;
+import com.ternbusty.takoyaki.util.json.JsonWriter;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Function;
 
+/**
+ * Thin facade over {@link JsonParser} and {@link JsonWriter} matched to
+ * the callsites in takoyaki.
+ *
+ * <p>The shape that flows through here is always a JSON tree —
+ * {@code Map<String,Object> / List<Object> / String / Long / Double /
+ * Boolean / null}. Bean-shaped types (Spec, State, KontainerConfig, ...)
+ * convert to/from the tree via their static {@code fromJson(Object)} and
+ * instance {@code toJson()} methods. {@link #readFile} takes the
+ * {@code fromJson} mapper as a {@link Function}, replacing jackson's
+ * {@code readValue(in, Class)} reflection.
+ */
 public final class Json {
     private Json() {}
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
-            .configure(SerializationFeature.INDENT_OUTPUT, true);
-
-    public static <T> T readFile(Path path, Class<T> cls) throws IOException {
-        return MAPPER.readValue(Files.readAllBytes(path), cls);
+    public static <T> T readFile(Path path, Function<Object, T> fromJson) throws IOException {
+        return fromJson.apply(JsonParser.parse(Files.readAllBytes(path)));
     }
 
-    public static void writeFile(Path path, Object value) throws IOException {
-        Files.write(path, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(value));
+    public static void writeFile(Path path, Object jsonTree) throws IOException {
+        Files.writeString(path, JsonWriter.toPretty(jsonTree));
     }
 
-    public static String encode(Object value) {
-        try {
-            return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public static String encode(Object jsonTree) {
+        return JsonWriter.toPretty(jsonTree);
     }
 
-    public static <T> T decode(String s, Class<T> cls) {
-        try {
-            return MAPPER.readValue(s, cls);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public static <T> T decode(String s, Function<Object, T> fromJson) {
+        return fromJson.apply(JsonParser.parse(s));
     }
 }

@@ -1,13 +1,13 @@
 package com.ternbusty.takoyaki.config;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ternbusty.takoyaki.util.Json;
+import com.ternbusty.takoyaki.util.json.JsonMap;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public final class KontainerConfig {
     public String cgroupPath;
 
@@ -24,10 +24,24 @@ public final class KontainerConfig {
     public void save(String rootPath, String containerId) throws IOException {
         Path p = path(rootPath, containerId);
         Files.createDirectories(p.getParent());
-        Json.writeFile(p, this);
+        Json.writeFile(p, toJson());
     }
 
     public static KontainerConfig load(String rootPath, String containerId) throws IOException {
-        return Json.readFile(path(rootPath, containerId), KontainerConfig.class);
+        return Json.readFile(path(rootPath, containerId), KontainerConfig::fromJson);
+    }
+
+    public static KontainerConfig fromJson(Object node) {
+        if (node == null) return null;
+        Map<String, Object> o = JsonMap.asObject(node);
+        KontainerConfig c = new KontainerConfig();
+        c.cgroupPath = JsonMap.str(o, "cgroupPath");
+        return c;
+    }
+
+    public Object toJson() {
+        Map<String, Object> o = JsonMap.obj();
+        JsonMap.put(o, "cgroupPath", cgroupPath);
+        return o;
     }
 }
